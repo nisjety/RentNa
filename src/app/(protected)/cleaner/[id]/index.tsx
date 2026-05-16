@@ -1,8 +1,10 @@
+import { useQuery } from 'convex/react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,20 +20,33 @@ import { StatsStrip } from '@/components/customer/stats-strip';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Radius, Shadow, Spacing, Typography } from '@/constants/theme';
-import { getCleanerById } from '@/data/mock-cleaners';
+import { adaptCleaner } from '@/data/adapters';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from 'convex/_generated/api';
 
 export default function CleanerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { height } = useWindowDimensions();
   const theme = useTheme();
   const router = useRouter();
-  const cleaner = id ? getCleanerById(id) : undefined;
   const [favorited, setFavorited] = useState(false);
+
+  const cleanerDoc = useQuery(
+    api.cleaners.getBySlug,
+    id ? { slug: id } : 'skip',
+  );
 
   const HERO_HEIGHT = Math.min(Math.round(height * 0.55), 520);
 
-  if (!cleaner) {
+  if (cleanerDoc === undefined) {
+    return (
+      <SafeAreaView style={[styles.notFound, { backgroundColor: theme.background }]}>
+        <ActivityIndicator color={theme.textSecondary} />
+      </SafeAreaView>
+    );
+  }
+
+  if (cleanerDoc === null) {
     return (
       <SafeAreaView style={[styles.notFound, { backgroundColor: theme.background }]}>
         <Text style={{ color: theme.textSecondary }}>Fant ikke renholderen.</Text>
@@ -40,6 +55,7 @@ export default function CleanerProfileScreen() {
     );
   }
 
+  const cleaner = adaptCleaner(cleanerDoc);
   const heroSrc = cleaner.heroImageUrl ?? cleaner.avatarUrl;
 
   return (
@@ -95,19 +111,21 @@ export default function CleanerProfileScreen() {
             <ServiceChips services={cleaner.services} />
           </View>
 
-          <View style={styles.section}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={[styles.sectionTitle, { color: theme.text }]}>
-                Hva kundene sier
-              </Text>
-              <Pressable hitSlop={6}>
-                <Text style={[styles.viewAll, { color: theme.textSecondary }]}>Se alle</Text>
-              </Pressable>
+          {cleaner.reviews.length > 0 && (
+            <View style={styles.section}>
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionTitle, { color: theme.text }]}>
+                  Hva kundene sier
+                </Text>
+                <Pressable hitSlop={6}>
+                  <Text style={[styles.viewAll, { color: theme.textSecondary }]}>Se alle</Text>
+                </Pressable>
+              </View>
+              {cleaner.reviews.slice(0, 1).map((r) => (
+                <ReviewCard key={r.id} review={r} />
+              ))}
             </View>
-            {cleaner.reviews.slice(0, 1).map((r) => (
-              <ReviewCard key={r.id} review={r} />
-            ))}
-          </View>
+          )}
         </View>
       </ScrollView>
 
@@ -198,19 +216,12 @@ const styles = StyleSheet.create({
   },
   superhostLabel: { ...Typography.caption, fontWeight: '600' },
 
-  body: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-  },
+  body: { paddingHorizontal: Spacing.four, paddingTop: Spacing.four },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   name: { ...Typography.title, fontFamily: 'Georgia' },
   location: { ...Typography.body, marginTop: 6 },
 
-  sectionDivider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: Spacing.three,
-  },
-
+  sectionDivider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.three },
   section: { gap: Spacing.three, marginTop: Spacing.four },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -221,12 +232,7 @@ const styles = StyleSheet.create({
   bio: { ...Typography.body, lineHeight: 22 },
   viewAll: { ...Typography.callout, fontWeight: '500' },
 
-  headerOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-  },
+  headerOverlay: { position: 'absolute', top: 0, left: 0, right: 0 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',

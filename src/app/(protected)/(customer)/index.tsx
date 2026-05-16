@@ -1,6 +1,7 @@
 import { useUser } from '@clerk/expo';
+import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -12,20 +13,32 @@ import { ServiceTile } from '@/components/customer/service-tile';
 import { Heading } from '@/components/ui/heading';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Spacing } from '@/constants/theme';
-import { getNextUpcomingBooking } from '@/data/mock-bookings';
+import { adaptBooking } from '@/data/adapters';
 import { greeting } from '@/data/mock-user';
 import { useTheme } from '@/hooks/use-theme';
 import type { ServiceType } from '@/data/mock-bookings';
+import { api } from 'convex/_generated/api';
 
 export default function CustomerHomeScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
-  const upcoming = getNextUpcomingBooking();
 
-  const firstName = user?.firstName
-    ?? user?.primaryEmailAddress?.emailAddress?.split('@')[0]
-    ?? '';
+  const nextUpcomingDoc = useQuery(api.bookings.nextUpcoming);
+
+  const upcoming = useMemo(
+    () => (nextUpcomingDoc ? adaptBooking(nextUpcomingDoc) : null),
+    [nextUpcomingDoc],
+  );
+
+  const firstName =
+    user?.firstName ??
+    user?.primaryEmailAddress?.emailAddress?.split('@')[0] ??
+    '';
+
+  const initials = user?.firstName
+    ? (user.firstName[0] + (user.lastName?.[0] ?? '')).toUpperCase()
+    : firstName[0]?.toUpperCase() ?? '?';
 
   const services: ServiceType[] = ['home', 'deep', 'move', 'office'];
 
@@ -35,15 +48,7 @@ export default function CustomerHomeScreen() {
         style={{ flex: 1 }}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}>
-        <HomeHeader
-          greeting={greeting()}
-          firstName={firstName}
-          initials={
-            user?.firstName
-              ? (user.firstName[0] + (user.lastName?.[0] ?? '')).toUpperCase()
-              : (firstName[0]?.toUpperCase() ?? '?')
-          }
-        />
+        <HomeHeader greeting={greeting()} firstName={firstName} initials={initials} />
 
         <View style={styles.titleBlock}>
           <Heading variant="display">Finn ditt{'\n'}perfekte renhold</Heading>

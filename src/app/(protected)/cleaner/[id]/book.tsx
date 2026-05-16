@@ -1,6 +1,8 @@
+import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,12 +15,10 @@ import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import {
-  getCleanerById,
-  SERVICE_LABEL,
-  type CleanerService,
-} from '@/data/mock-cleaners';
+import { adaptCleaner } from '@/data/adapters';
+import { SERVICE_LABEL, type CleanerService } from '@/data/mock-cleaners';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from 'convex/_generated/api';
 
 // ─── Types & constants ────────────────────────────────────────────────────────
 
@@ -46,10 +46,10 @@ const FREQUENCY_OPTS: {
   sub: string;
   discount: number;
 }[] = [
-  { key: 'once', label: 'Én gang', sub: 'Engangsbestilling', discount: 0 },
-  { key: 'weekly', label: 'Hver uke', sub: 'Spar 10 %', discount: 0.1 },
-  { key: 'biweekly', label: 'Annenhver uke', sub: 'Spar 7 %', discount: 0.07 },
-  { key: 'monthly', label: 'Hver måned', sub: 'Spar 5 %', discount: 0.05 },
+  { key: 'once',     label: 'Én gang',        sub: 'Engangsbestilling', discount: 0 },
+  { key: 'weekly',   label: 'Hver uke',       sub: 'Spar 10 %',         discount: 0.1 },
+  { key: 'biweekly', label: 'Annenhver uke',  sub: 'Spar 7 %',          discount: 0.07 },
+  { key: 'monthly',  label: 'Hver måned',     sub: 'Spar 5 %',          discount: 0.05 },
 ];
 
 const STEPS = ['Tjeneste', 'Dato & tid', 'Hyppighet', 'Sammendrag'];
@@ -58,6 +58,14 @@ const MONTH_SHORT = [
   'jan', 'feb', 'mar', 'apr', 'mai', 'jun',
   'jul', 'aug', 'sep', 'okt', 'nov', 'des',
 ];
+
+const SERVICE_TYPE_MAP: Record<CleanerService, string> = {
+  regular: 'home',
+  deep: 'deep',
+  move: 'move',
+  office: 'office',
+  windows: 'home',
+};
 
 function getAvailableSlots(date: Date): string[] {
   const dow = date.getDay();
@@ -82,16 +90,28 @@ export default function BookScreen() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
 
-  const cleaner = id ? getCleanerById(id) : undefined;
+  const cleanerDoc = useQuery(api.cleaners.getBySlug, id ? { slug: id } : 'skip');
+  const createBooking = useMutation(api.bookings.create);
+
+  const cleaner = cleanerDoc ? adaptCleaner(cleanerDoc) : undefined;
 
   const [step, setStep] = useState(0);
-  const [service, setService] = useState<CleanerService>(
-    cleaner?.services[0] ?? 'regular',
-  );
+  const [service, setService] = useState<CleanerService>('regular');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [frequency, setFrequency] = useState<Frequency>('once');
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmedRef, setConfirmedRef] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update default service when cleaner loads
+  const [serviceInitialized, setServiceInitialized] = useState(false);
+  if (cleaner && !serviceInitialized) {
+    setServiceInitialized(true);
+    if (cleaner.services.length > 0) {
+      setService(cleaner.services[0] as CleanerService);
+    }
+  }
 
   const dates = Array.from({ length: 14 }, (_, i) => {
     const d = new Date();
@@ -109,12 +129,42 @@ export default function BookScreen() {
   const canContinue =
     step === 1 ? selectedDate !== null && selectedTime !== null : true;
 
-  function goNext() {
+  async function goNext() {
     if (step < STEPS.length - 1) {
       setStep((s) => s + 1);
       scrollRef.current?.scrollTo({ y: 0, animated: false });
     } else {
-      setConfirmed(true);
+      // Confirm booking → write to Convex
+      if (!cleaner || !selectedDate || !selectedTime) return;
+      setIsSubmitting(true);
+      try {
+        const [h, m] = selectedTime.split(':').map(Number);
+        const startDate = new Date(selectedDate);
+        startDate.setHours(h, m, 0, 0);
+        const endDate = new Date(startDate);
+        endDate.setHours(endDate.getHours() + Math.ceil(duration));
+
+        const ref = await createBooking({
+          cleanerSlug: cleaner.id,
+          cleanerName: cleaner.name,
+          service: SERVICE_LABEL[service],
+          serviceType: SERVICE_TYPE_MAP[service],
+          startsAt: startDate.toISOString(),
+          endsAt: endDate.toISOString(),
+          address: '—',
+          totalKr: totalPrice,
+          recurring: frequency === 'once' ? undefined : frequency,
+          addOns: [],
+          paymentBrand: 'visa',
+          paymentLast4: '4242',
+        });
+        setConfirmedRef(String(ref));
+        setConfirmed(true);
+      } catch (err) {
+        console.error('Booking failed:', err);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   }
 
@@ -125,6 +175,17 @@ export default function BookScreen() {
     } else {
       router.back();
     }
+  }
+
+  if (!cleanerDoc && cleanerDoc !== null) {
+    // Loading
+    return (
+      <SafeAreaView
+        style={[styles.notFound, { backgroundColor: theme.background }]}
+        edges={['top', 'bottom']}>
+        <ActivityIndicator color={theme.textSecondary} />
+      </SafeAreaView>
+    );
   }
 
   if (!cleaner) {
@@ -140,27 +201,35 @@ export default function BookScreen() {
 
   // ── Success state ──────────────────────────────────────────────────────────
   if (confirmed) {
-    const refNum = `RN-${new Date().getFullYear()}-${String(1000 + (cleaner.id.charCodeAt(3) % 9000)).padStart(4, '0')}`;
     return (
       <SafeAreaView
         style={[styles.successRoot, { backgroundColor: theme.background }]}
         edges={['top', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.successContent} showsVerticalScrollIndicator={false}>
-          <View style={[styles.successCircle, { backgroundColor: '#3D9970' + '22' }]}>
+        <ScrollView
+          contentContainerStyle={styles.successContent}
+          showsVerticalScrollIndicator={false}>
+          <View style={[styles.successCircle, { backgroundColor: '#3D997022' }]}>
             <Icon name="checkmark" size={44} color="#3D9970" />
           </View>
           <Text style={[styles.successTitle, { color: theme.text }]}>Bestilling sendt!</Text>
           <Text style={[styles.successSub, { color: theme.textSecondary }]}>
-            {cleaner.shortName.replace('.', '')} bekrefter innen kort tid.{'\n'}Du får varsel på SMS og e-post.
+            {cleaner.shortName.replace('.', '')} bekrefter innen kort tid.{'\n'}
+            Du får varsel på SMS og e-post.
           </Text>
 
           <View style={[styles.refChip, { backgroundColor: theme.surfaceMuted }]}>
-            <Text style={[styles.refLabel, { color: theme.textSecondary }]}>Referanse</Text>
-            <Text style={[styles.refNum, { color: theme.text }]}>#{refNum}</Text>
+            <Text style={[styles.refLabel, { color: theme.textSecondary }]}>Ordre</Text>
+            <Text style={[styles.refNum, { color: theme.text }]} selectable>
+              #{confirmedRef.slice(-8).toUpperCase()}
+            </Text>
           </View>
 
           <View style={[styles.summaryCard, { backgroundColor: theme.surface }]}>
-            <SummaryRow icon="person-outline" label={cleaner.name} value={`${cleaner.hourlyRateKr} kr/t`} />
+            <SummaryRow
+              icon="person-outline"
+              label={cleaner.name}
+              value={`${cleaner.hourlyRateKr} kr/t`}
+            />
             <SummaryRow
               icon="briefcase-outline"
               label={SERVICE_LABEL[service]}
@@ -250,7 +319,7 @@ export default function BookScreen() {
         keyboardShouldPersistTaps="handled">
         {step === 0 && (
           <StepService
-            services={cleaner.services}
+            services={cleaner.services as CleanerService[]}
             selected={service}
             onSelect={setService}
             hourlyRate={cleaner.hourlyRateKr}
@@ -261,7 +330,10 @@ export default function BookScreen() {
             dates={dates}
             selectedDate={selectedDate}
             selectedTime={selectedTime}
-            onSelectDate={(d) => { setSelectedDate(d); setSelectedTime(null); }}
+            onSelectDate={(d) => {
+              setSelectedDate(d);
+              setSelectedTime(null);
+            }}
             onSelectTime={setSelectedTime}
           />
         )}
@@ -288,7 +360,9 @@ export default function BookScreen() {
       </ScrollView>
 
       {/* Footer */}
-      <SafeAreaView edges={['bottom']} style={[styles.footer, { backgroundColor: theme.background }]}>
+      <SafeAreaView
+        edges={['bottom']}
+        style={[styles.footer, { backgroundColor: theme.background }]}>
         <View style={styles.footerRow}>
           {step > 0 && (
             <Pressable
@@ -304,17 +378,19 @@ export default function BookScreen() {
           <View style={{ flex: 1 }}>
             <Button
               label={
-                step === STEPS.length - 1
-                  ? 'Bekreft bestilling'
-                  : step === 1 && !canContinue
-                    ? selectedDate
-                      ? 'Velg tidspunkt'
-                      : 'Velg dato'
-                    : 'Fortsett'
+                isSubmitting
+                  ? 'Sender…'
+                  : step === STEPS.length - 1
+                    ? 'Bekreft bestilling'
+                    : step === 1 && !canContinue
+                      ? selectedDate
+                        ? 'Velg tidspunkt'
+                        : 'Velg dato'
+                      : 'Fortsett'
               }
-              variant={canContinue ? 'primary' : 'secondary'}
+              variant={canContinue && !isSubmitting ? 'primary' : 'secondary'}
               size="lg"
-              onPress={canContinue ? goNext : undefined}
+              onPress={canContinue && !isSubmitting ? goNext : undefined}
             />
           </View>
         </View>
@@ -485,7 +561,11 @@ function StepDateTime({
 
       {selectedDate && (
         <>
-          <Text style={[styles.stepSectionTitle, { color: theme.text, marginTop: Spacing.five }]}>
+          <Text
+            style={[
+              styles.stepSectionTitle,
+              { color: theme.text, marginTop: Spacing.five },
+            ]}>
             Tidspunkter · {fmtDate(selectedDate)}
           </Text>
           <View style={styles.slotsGrid}>
@@ -615,7 +695,7 @@ function StepSummary({
   savings,
   totalPrice,
 }: {
-  cleaner: ReturnType<typeof getCleanerById>;
+  cleaner: ReturnType<typeof adaptCleaner>;
   service: CleanerService;
   duration: number;
   selectedDate: Date | null;
@@ -626,7 +706,6 @@ function StepSummary({
   totalPrice: number;
 }) {
   const theme = useTheme();
-  if (!cleaner) return null;
   const freqOpt = FREQUENCY_OPTS.find((f) => f.key === frequency)!;
 
   return (
@@ -635,7 +714,6 @@ function StepSummary({
         Gjennomgå bestillingen din
       </Text>
 
-      {/* Cleaner mini-card */}
       <View style={[styles.cleanerMini, { backgroundColor: theme.surface }]}>
         <Avatar initials={cleaner.initials} size={44} tone="taupe" />
         <View style={{ flex: 1 }}>
@@ -652,7 +730,6 @@ function StepSummary({
         </View>
       </View>
 
-      {/* Details */}
       <View style={[styles.summaryCard, { backgroundColor: theme.surface }]}>
         <SummaryRow
           icon="briefcase-outline"
@@ -687,7 +764,8 @@ function StepSummary({
       </View>
 
       <Text style={[styles.disclaimer, { color: theme.textMuted }]}>
-        Betaling skjer etter fullført vask via Vipps eller kort. Avbestilling er gratis inntil 24 timer før.
+        Betaling skjer etter fullført vask via Vipps eller kort. Avbestilling er gratis inntil 24
+        timer før.
       </Text>
     </View>
   );
@@ -756,13 +834,7 @@ const styles = StyleSheet.create({
   stepHint: { ...Typography.body, marginBottom: Spacing.one },
   stepSectionTitle: { ...Typography.subhead, fontWeight: '600', marginBottom: Spacing.two },
 
-  // Service cards
-  serviceCard: {
-    borderRadius: Radius.lg,
-    borderWidth: 1.5,
-    padding: Spacing.four,
-    gap: Spacing.three,
-  },
+  serviceCard: { borderRadius: Radius.lg, borderWidth: 1.5, padding: Spacing.four, gap: Spacing.three },
   serviceCardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.three },
   serviceCardName: { ...Typography.subhead, fontWeight: '600' },
   serviceCardDesc: { ...Typography.caption, marginTop: 2 },
@@ -789,7 +861,6 @@ const styles = StyleSheet.create({
   durationText: { ...Typography.micro },
   servicePrice: { ...Typography.callout, fontWeight: '700' },
 
-  // Date chips
   dateScroll: { gap: Spacing.two, paddingBottom: Spacing.one },
   dateChip: {
     alignItems: 'center',
@@ -804,7 +875,6 @@ const styles = StyleSheet.create({
   dateDayNum: { ...Typography.subhead, fontWeight: '700' },
   dateMonth: { ...Typography.micro },
 
-  // Time slots
   slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   slotChip: {
     flexDirection: 'row',
@@ -819,7 +889,6 @@ const styles = StyleSheet.create({
   },
   slotTime: { ...Typography.callout, fontWeight: '500' },
 
-  // Frequency cards
   freqCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -836,18 +905,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  freqRadioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#172713',
-  },
+  freqRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#172713' },
   freqLabel: { ...Typography.bodyMedium },
   freqSub: { ...Typography.caption, marginTop: 2 },
   freqPrice: { ...Typography.callout, fontWeight: '700' },
   freqOrigPrice: { ...Typography.micro, textDecorationLine: 'line-through', marginTop: 2 },
 
-  // Summary
   cleanerMini: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -888,7 +951,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
   },
 
-  // Footer
   footer: {
     paddingHorizontal: Spacing.four,
     paddingTop: Spacing.three,
@@ -902,7 +964,6 @@ const styles = StyleSheet.create({
   },
   backTextLabel: { ...Typography.bodyMedium, fontWeight: '600' },
 
-  // Success
   successRoot: { flex: 1 },
   successContent: {
     flexGrow: 1,

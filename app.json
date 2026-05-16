@@ -8,7 +8,7 @@
     "scheme": "rentna",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -51,7 +51,8 @@
       "expo-sqlite",
       "expo-tracking-transparency",
       "expo-widgets",
-      "expo-font"
+      "expo-font",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,

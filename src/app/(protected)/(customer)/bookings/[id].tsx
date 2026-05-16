@@ -1,8 +1,9 @@
+import { useQuery } from 'convex/react';
 import { format } from 'date-fns';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from '@/components/customer/screen-header';
@@ -11,26 +12,45 @@ import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { StatusPill } from '@/components/ui/pill';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import { getBookingById } from '@/data/mock-bookings';
+import { adaptBooking } from '@/data/adapters';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from 'convex/_generated/api';
+import type { Id } from 'convex/_generated/dataModel';
 
 export default function BookingDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const theme = useTheme();
   const router = useRouter();
-  const booking = id ? getBookingById(id) : undefined;
 
-  if (!booking) {
+  const bookingDoc = useQuery(
+    api.bookings.getById,
+    id ? { id: id as Id<'bookings'> } : 'skip',
+  );
+
+  if (bookingDoc === undefined) {
     return (
       <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]}>
         <ScreenHeader title="Booking" />
         <View style={styles.center}>
-          <Text style={{ color: theme.textSecondary }}>Booking not found.</Text>
+          <ActivityIndicator color={theme.textSecondary} />
         </View>
       </SafeAreaView>
     );
   }
 
+  if (bookingDoc === null) {
+    return (
+      <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]}>
+        <ScreenHeader title="Booking" />
+        <View style={styles.center}>
+          <Text style={{ color: theme.textSecondary }}>Booking ikke funnet.</Text>
+          <Button label="Tilbake" variant="ghost" onPress={() => router.back()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const booking = adaptBooking(bookingDoc);
   const start = new Date(booking.startsAt);
   const end = new Date(booking.endsAt);
 
@@ -83,6 +103,7 @@ export default function BookingDetailScreen() {
             right={
               <Pressable
                 hitSlop={10}
+                onPress={() => router.push(`/cleaner/${booking.cleaner.id}`)}
                 style={({ pressed }) => [
                   styles.chatBtn,
                   { backgroundColor: theme.surfaceMuted },
@@ -93,12 +114,7 @@ export default function BookingDetailScreen() {
             }
           />
 
-          <ServiceLine
-            iconName="cube-outline"
-            label="Tjenester"
-            value="Standard hjemvask"
-            chevron
-          />
+          <ServiceLine iconName="cube-outline" label="Tjenester" value={booking.service} chevron />
 
           {booking.addOns.map((a) => (
             <ServiceLine
@@ -120,11 +136,30 @@ export default function BookingDetailScreen() {
             }
             trailing={`${booking.totalKr.toLocaleString('no-NO')} kr`}
           />
+
+          {booking.recurring && (
+            <ServiceLine
+              iconName="refresh-outline"
+              label="Hyppighet"
+              value={
+                booking.recurring === 'weekly'
+                  ? 'Hver uke'
+                  : booking.recurring === 'biweekly'
+                    ? 'Annenhver uke'
+                    : 'Hver måned'
+              }
+            />
+          )}
         </View>
       </ScrollView>
 
       <View style={[styles.footer, { backgroundColor: theme.background }]}>
-        <Button label="Kontakt renholder" variant="primary" size="lg" onPress={() => router.back()} />
+        <Button
+          label="Kontakt renholder"
+          variant="primary"
+          size="lg"
+          onPress={() => router.push(`/cleaner/${booking.cleaner.id}`)}
+        />
       </View>
     </SafeAreaView>
   );
@@ -182,7 +217,7 @@ function ServiceLine({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   scroll: { paddingBottom: 120 },
   screenTitle: {
     ...Typography.title,
@@ -190,24 +225,13 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.three,
   },
   heroWrap: { paddingHorizontal: Spacing.four },
-  hero: {
-    width: '100%',
-    height: 220,
-    borderRadius: Radius.xl,
-  },
+  hero: { width: '100%', height: 220, borderRadius: Radius.xl },
   heroPill: { position: 'absolute', top: Spacing.three, right: Spacing.six },
-  bodyBlock: {
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.four,
-    gap: Spacing.three,
-  },
+  bodyBlock: { paddingHorizontal: Spacing.four, paddingTop: Spacing.four, gap: Spacing.three },
   bookingTitle: { ...Typography.headline, marginBottom: Spacing.one },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   metaText: { ...Typography.callout },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginVertical: Spacing.three,
-  },
+  divider: { height: StyleSheet.hairlineWidth, marginVertical: Spacing.three },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',

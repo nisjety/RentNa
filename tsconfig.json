@@ -8,6 +8,9 @@
       ],
       "@/assets/*": [
         "./assets/*"
+      ],
+      "convex/_generated/*": [
+        "./convex/_generated/*"
       ]
     }
   },

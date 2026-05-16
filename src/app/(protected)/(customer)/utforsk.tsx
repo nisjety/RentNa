@@ -1,27 +1,83 @@
+import { useQuery, useMutation } from 'convex/react';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CleanerListCard } from '@/components/customer/cleaner-list-card';
 import { FilterChips, type Chip } from '@/components/customer/filter-chips';
 import { Icon } from '@/components/ui/icon';
-import { SearchBar } from '@/components/ui/search-bar';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import { getCleaners } from '@/data/mock-cleaners';
+import { adaptCleaner } from '@/data/adapters';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from 'convex/_generated/api';
+
+type FilterKey = 'service' | 'tag';
+
+interface FilterDef {
+  id: string;
+  label: string;
+  type: FilterKey;
+  value: string;
+}
+
+const FILTER_DEFS: FilterDef[] = [
+  { id: 'regular', label: 'Hjemvask',      type: 'service', value: 'regular' },
+  { id: 'deep',    label: 'Dypvask',       type: 'service', value: 'deep' },
+  { id: 'move',    label: 'Flyttevask',    type: 'service', value: 'move' },
+  { id: 'office',  label: 'Kontorvask',    type: 'service', value: 'office' },
+  { id: 'eco',     label: 'Miljøvennlig',  type: 'tag',     value: 'eco' },
+  { id: 'norwegian', label: 'Snakker norsk', type: 'tag', value: 'norwegian' },
+  { id: 'pets_ok', label: 'Husdyr OK',    type: 'tag',     value: 'pets_ok' },
+];
 
 export default function UtforskScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const cleaners = getCleaners();
 
-  const [chips, setChips] = useState<Chip[]>([
-    { id: 'area', label: 'Grünerløkka', active: true, removable: true },
-    { id: 'when', label: 'I morgen', active: true, removable: true },
-    { id: 'lang', label: 'Snakker norsk', active: false },
-  ]);
+  const [activeService, setActiveService] = useState<string | undefined>();
+  const [activeTag, setActiveTag] = useState<string | undefined>();
+
+  const cleanerDocs = useQuery(api.cleaners.list, {
+    service: activeService,
+    tag: activeTag,
+  });
+
+  const seedCleaners = useMutation(api.seed.seedCleaners);
+
+  // Seed demo cleaners if the database is empty
+  useEffect(() => {
+    if (cleanerDocs !== undefined && cleanerDocs.length === 0) {
+      seedCleaners({}).catch(console.error);
+    }
+  }, [cleanerDocs, seedCleaners]);
+
+  const cleaners = useMemo(
+    () => (cleanerDocs ?? []).map(adaptCleaner),
+    [cleanerDocs],
+  );
+
+  // Build chip state from filter defs
+  const chips: Chip[] = FILTER_DEFS.map((def) => ({
+    id: def.id,
+    label: def.label,
+    active:
+      (def.type === 'service' && def.value === activeService) ||
+      (def.type === 'tag' && def.value === activeTag),
+  }));
+
+  function handleChipPress(chip: Chip) {
+    const def = FILTER_DEFS.find((d) => d.id === chip.id);
+    if (!def) return;
+    if (def.type === 'service') {
+      setActiveService((prev) => (prev === def.value ? undefined : def.value));
+    } else {
+      setActiveTag((prev) => (prev === def.value ? undefined : def.value));
+    }
+  }
+
+  const isLoading = cleanerDocs === undefined;
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top']}>
@@ -40,34 +96,27 @@ export default function UtforskScreen() {
         <View style={[styles.searchInline, { backgroundColor: theme.surface }]}>
           <Icon name="search-outline" size={18} color={theme.textSecondary} />
           <Text style={[styles.searchPlaceholder, { color: theme.textSecondary }]}>
-            Renholder i Grünerløkka
+            Finn renholder i Oslo
           </Text>
         </View>
-
-        <Pressable
-          hitSlop={8}
-          style={({ pressed }) => [pressed && styles.pressed]}>
-          <Text style={[styles.headerLink, { color: theme.text }]}>I morgen</Text>
-        </Pressable>
       </View>
 
       <View style={styles.filterRow}>
         <FilterChips
           chips={chips}
-          leadingCount={4}
-          onPress={(c) =>
-            setChips((prev) =>
-              prev.map((p) => (p.id === c.id ? { ...p, active: !p.active } : p)),
-            )
-          }
-          onRemove={(c) => setChips((prev) => prev.filter((p) => p.id !== c.id))}
+          leadingCount={chips.filter((c) => c.active).length}
+          onPress={handleChipPress}
         />
       </View>
 
       <View style={styles.metaRow}>
-        <Text style={[styles.count, { color: theme.text }]}>
-          {cleaners.length} renholdere
-        </Text>
+        {isLoading ? (
+          <ActivityIndicator size="small" color={theme.textSecondary} />
+        ) : (
+          <Text style={[styles.count, { color: theme.text }]}>
+            {cleaners.length} renholder{cleaners.length !== 1 ? 'e' : ''}
+          </Text>
+        )}
         <Pressable hitSlop={6} style={({ pressed }) => [pressed && styles.pressed]}>
           <Text style={[styles.sort, { color: theme.textSecondary }]}>
             Sorter: Best match ⌄
@@ -87,6 +136,13 @@ export default function UtforskScreen() {
             onBook={() => router.push(`/cleaner/${item.id}`)}
           />
         )}
+        ListEmptyComponent={
+          isLoading ? null : (
+            <Text style={[styles.empty, { color: theme.textSecondary }]}>
+              Ingen renholdere funnet. Prøv å fjerne filtere.
+            </Text>
+          )
+        }
       />
 
       <Pressable
@@ -129,7 +185,6 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pill,
   },
   searchPlaceholder: { ...Typography.callout },
-  headerLink: { ...Typography.callout, fontWeight: '500' },
   filterRow: { paddingBottom: Spacing.three },
   metaRow: {
     flexDirection: 'row',
@@ -141,6 +196,11 @@ const styles = StyleSheet.create({
   count: { ...Typography.callout, fontWeight: '600' },
   sort: { ...Typography.callout },
   list: { paddingHorizontal: Spacing.four, paddingBottom: 120 },
+  empty: {
+    ...Typography.body,
+    textAlign: 'center',
+    paddingTop: Spacing.eight,
+  },
   mapBtn: {
     position: 'absolute',
     bottom: Spacing.eight,
@@ -155,5 +215,3 @@ const styles = StyleSheet.create({
   mapLabel: { ...Typography.callout, fontWeight: '600' },
   pressed: { opacity: 0.85 },
 });
-// hide unused: SearchBar imported for type/future use
-void SearchBar;
