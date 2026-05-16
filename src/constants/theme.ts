@@ -103,15 +103,15 @@ export const Radius = {
 } as const;
 
 export const Typography = {
-  display: { fontSize: 40, lineHeight: 44, fontWeight: '700' as const, letterSpacing: -1.4 },
-  title: { fontSize: 30, lineHeight: 34, fontWeight: '600' as const, letterSpacing: -0.8 },
-  headline: { fontSize: 22, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.4 },
-  subhead: { fontSize: 17, lineHeight: 22, fontWeight: '600' as const, letterSpacing: -0.3 },
-  body: { fontSize: 15, lineHeight: 21, fontWeight: '400' as const, letterSpacing: -0.2 },
-  bodyMedium: { fontSize: 15, lineHeight: 21, fontWeight: '500' as const, letterSpacing: -0.2 },
-  callout: { fontSize: 14, lineHeight: 19, fontWeight: '500' as const, letterSpacing: -0.15 },
-  caption: { fontSize: 13, lineHeight: 18, fontWeight: '400' as const, letterSpacing: -0.1 },
-  micro: { fontSize: 11, lineHeight: 14, fontWeight: '600' as const, letterSpacing: 0.4 },
+  display:    { fontSize: 28, lineHeight: 32, fontWeight: '700' as const, letterSpacing: -0.8 },
+  title:      { fontSize: 22, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.5 },
+  headline:   { fontSize: 17, lineHeight: 22, fontWeight: '600' as const, letterSpacing: -0.3 },
+  subhead:    { fontSize: 15, lineHeight: 20, fontWeight: '600' as const, letterSpacing: -0.2 },
+  body:       { fontSize: 14, lineHeight: 20, fontWeight: '400' as const, letterSpacing: -0.1 },
+  bodyMedium: { fontSize: 14, lineHeight: 20, fontWeight: '500' as const, letterSpacing: -0.1 },
+  callout:    { fontSize: 13, lineHeight: 18, fontWeight: '500' as const, letterSpacing: -0.1 },
+  caption:    { fontSize: 12, lineHeight: 16, fontWeight: '400' as const, letterSpacing:  0   },
+  micro:      { fontSize: 10, lineHeight: 13, fontWeight: '600' as const, letterSpacing:  0.3 },
 };
 
 export const Shadow = {
