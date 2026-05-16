@@ -32,7 +32,7 @@ function AppProviders({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout() {
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+    <ClerkProvider publishableKey={publishableKey!} tokenCache={tokenCache}>
       <AppProviders>
         <AnimatedSplashOverlay />
         <Slot />
