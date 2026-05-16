@@ -46,7 +46,7 @@ export default function BookingDetailScreen() {
 
         <View style={styles.heroWrap}>
           <Image
-            source={{ uri: booking.imageUrl }}
+            source={booking.imageUrl}
             style={styles.hero}
             contentFit="cover"
             transition={200}

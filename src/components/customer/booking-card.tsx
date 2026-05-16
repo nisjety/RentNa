@@ -31,7 +31,7 @@ export function BookingCard({ booking, onPress, variant = 'list' }: Props) {
         ]}>
         <View style={styles.featureImageWrap}>
           <Image
-            source={{ uri: booking.imageUrl }}
+            source={booking.imageUrl}
             style={styles.featureImage}
             contentFit="cover"
             transition={200}
@@ -66,7 +66,7 @@ export function BookingCard({ booking, onPress, variant = 'list' }: Props) {
         pressed && styles.pressed,
       ]}>
       <Image
-        source={{ uri: booking.imageUrl }}
+        source={booking.imageUrl}
         style={styles.rowImage}
         contentFit="cover"
         transition={200}

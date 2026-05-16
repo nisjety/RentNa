@@ -6,7 +6,7 @@ import { Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 interface AvatarProps {
-  uri?: string;
+  uri?: string | number;
   initials?: string;
   size?: number;
   tone?: 'pink' | 'blue' | 'taupe' | 'muted';
@@ -23,10 +23,10 @@ export function Avatar({ uri, initials, size = 36, tone = 'pink' }: AvatarProps)
   const theme = useTheme();
   const radius = size / 2;
 
-  if (uri) {
+  if (uri !== undefined) {
     return (
       <Image
-        source={{ uri }}
+        source={typeof uri === 'number' ? uri : { uri }}
         style={{
           width: size,
           height: size,

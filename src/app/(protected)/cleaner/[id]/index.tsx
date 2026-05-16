@@ -3,11 +3,11 @@ import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  Dimensions,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -21,15 +21,15 @@ import { Radius, Shadow, Spacing, Typography } from '@/constants/theme';
 import { getCleanerById } from '@/data/mock-cleaners';
 import { useTheme } from '@/hooks/use-theme';
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-const HERO_HEIGHT = Math.min(Math.round(SCREEN_HEIGHT * 0.55), 520);
-
 export default function CleanerProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const { height } = useWindowDimensions();
   const theme = useTheme();
   const router = useRouter();
   const cleaner = id ? getCleanerById(id) : undefined;
   const [favorited, setFavorited] = useState(false);
+
+  const HERO_HEIGHT = Math.min(Math.round(height * 0.55), 520);
 
   if (!cleaner) {
     return (
@@ -40,7 +40,7 @@ export default function CleanerProfileScreen() {
     );
   }
 
-  const heroUrl = cleaner.heroImageUrl ?? cleaner.avatarUrl;
+  const heroSrc = cleaner.heroImageUrl ?? cleaner.avatarUrl;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -50,7 +50,7 @@ export default function CleanerProfileScreen() {
         showsVerticalScrollIndicator={false}>
         <View style={[styles.hero, { height: HERO_HEIGHT }]}>
           <Image
-            source={{ uri: heroUrl }}
+            source={heroSrc}
             style={StyleSheet.absoluteFillObject}
             contentFit="cover"
             transition={250}
