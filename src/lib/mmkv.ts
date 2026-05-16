@@ -1,14 +1,12 @@
-import { createMMKV } from 'react-native-mmkv';
+import * as SecureStore from 'expo-secure-store';
 
-export const storage = createMMKV({ id: 'rentna.v1' });
-
+/**
+ * Zustand-persist storage adapter backed by expo-secure-store.
+ * Works in Expo Go (no NitroModules required).
+ * Values are capped at ~2 KB on Android — fine for small state blobs.
+ */
 export const mmkvZustandStorage = {
-  setItem: (name: string, value: string) => storage.set(name, value),
-  getItem: (name: string) => {
-    const value = storage.getString(name);
-    return value ?? null;
-  },
-  removeItem: (name: string) => {
-    storage.remove(name);
-  },
+  setItem: (name: string, value: string) => SecureStore.setItemAsync(name, value),
+  getItem: (name: string) => SecureStore.getItemAsync(name),
+  removeItem: (name: string) => SecureStore.deleteItemAsync(name),
 };
