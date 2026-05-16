@@ -1,4 +1,4 @@
-import { useAuth } from '@clerk/expo';
+import { useAuth, useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -8,7 +8,6 @@ import { Avatar } from '@/components/ui/avatar';
 import { Heading } from '@/components/ui/heading';
 import { Icon } from '@/components/ui/icon';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import { mockCurrentUser } from '@/data/mock-user';
 import { useTheme } from '@/hooks/use-theme';
 import { useRoleStore } from '@/stores/role-store';
 
@@ -24,7 +23,17 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { signOut } = useAuth();
+  const { user } = useUser();
   const { reset } = useRoleStore();
+
+  const firstName = user?.firstName ?? '';
+  const lastName = user?.lastName ?? '';
+  const joined = [firstName, lastName].filter(Boolean).join(' ');
+  const fullName = joined || (user?.primaryEmailAddress?.emailAddress ?? 'Bruker');
+  const email = user?.primaryEmailAddress?.emailAddress ?? '';
+  const letterInitials = [firstName[0], lastName[0]].filter(Boolean).join('').toUpperCase();
+  const initials = letterInitials || (fullName[0]?.toUpperCase() ?? '?');
+  const avatarUrl = user?.imageUrl;
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top']}>
@@ -34,14 +43,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={[styles.hero, { backgroundColor: theme.surface }]}>
-          <Avatar initials={mockCurrentUser.initials} size={56} tone="taupe" />
+          <Avatar uri={avatarUrl} initials={initials} size={56} tone="taupe" />
           <View style={{ flex: 1 }}>
-            <Text style={[styles.name, { color: theme.text }]}>
-              {mockCurrentUser.firstName} {mockCurrentUser.lastName}
-            </Text>
-            <Text style={[styles.email, { color: theme.textSecondary }]}>
-              eva@email.com
-            </Text>
+            <Text style={[styles.name, { color: theme.text }]}>{fullName}</Text>
+            <Text style={[styles.email, { color: theme.textSecondary }]}>{email}</Text>
             <View style={[styles.pointsPill, { backgroundColor: theme.accent }]}>
               <Text style={[styles.pointsText, { color: theme.accentText }]}>+ 320 poeng</Text>
             </View>

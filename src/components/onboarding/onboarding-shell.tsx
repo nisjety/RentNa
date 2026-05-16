@@ -15,6 +15,7 @@ interface Props {
   city?: string;
   year?: number;
   showBack?: boolean;
+  onBack?: () => void;
 }
 
 export function OnboardingShell({
@@ -24,6 +25,7 @@ export function OnboardingShell({
   city = 'Oslo',
   year = new Date().getFullYear(),
   showBack = false,
+  onBack,
 }: Props) {
   const theme = useTheme();
   const router = useRouter();
@@ -33,7 +35,7 @@ export function OnboardingShell({
       <View style={styles.headerRow}>
         {showBack ? (
           <Pressable
-            onPress={() => router.back()}
+            onPress={onBack ?? (() => router.back())}
             hitSlop={12}
             style={({ pressed }) => [
               styles.iconBtn,

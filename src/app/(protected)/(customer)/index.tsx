@@ -1,3 +1,4 @@
+import { useUser } from '@clerk/expo';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -12,14 +13,19 @@ import { Heading } from '@/components/ui/heading';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Spacing } from '@/constants/theme';
 import { getNextUpcomingBooking } from '@/data/mock-bookings';
-import { greeting, mockCurrentUser } from '@/data/mock-user';
+import { greeting } from '@/data/mock-user';
 import { useTheme } from '@/hooks/use-theme';
 import type { ServiceType } from '@/data/mock-bookings';
 
 export default function CustomerHomeScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { user } = useUser();
   const upcoming = getNextUpcomingBooking();
+
+  const firstName = user?.firstName
+    ?? user?.primaryEmailAddress?.emailAddress?.split('@')[0]
+    ?? '';
 
   const services: ServiceType[] = ['home', 'deep', 'move', 'office'];
 
@@ -31,8 +37,12 @@ export default function CustomerHomeScreen() {
         showsVerticalScrollIndicator={false}>
         <HomeHeader
           greeting={greeting()}
-          firstName={mockCurrentUser.firstName}
-          initials={mockCurrentUser.initials}
+          firstName={firstName}
+          initials={
+            user?.firstName
+              ? (user.firstName[0] + (user.lastName?.[0] ?? '')).toUpperCase()
+              : (firstName[0]?.toUpperCase() ?? '?')
+          }
         />
 
         <View style={styles.titleBlock}>
