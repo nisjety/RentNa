@@ -15,14 +15,13 @@ function tabIcon(filled: IoniconName, outline: IoniconName) {
   );
 }
 
-export default function CustomerTabsLayout() {
+export default function CleanerTabsLayout() {
   const scheme = useColorScheme();
   const palette = Colors[scheme === 'unspecified' ? 'light' : scheme];
-  const { hasOnboarded, activeRole } = useRoleStore();
+  const { activeRole, hasOnboarded } = useRoleStore();
 
   if (!hasOnboarded) return <Redirect href="/onboarding" />;
-  if (activeRole === 'cleaner') return <Redirect href="/pro" />;
-  if (activeRole !== 'customer') return <Redirect href="/role-stub" />;
+  if (activeRole !== 'cleaner') return <Redirect href="/" />;
 
   return (
     <Tabs
@@ -45,30 +44,31 @@ export default function CustomerTabsLayout() {
       }}>
       <Tabs.Screen
         name="index"
-        options={{ title: 'Hjem', tabBarIcon: tabIcon('home', 'home-outline') }}
+        options={{ title: 'I dag', tabBarIcon: tabIcon('briefcase', 'briefcase-outline') }}
       />
       <Tabs.Screen
-        name="utforsk"
-        options={{ title: 'Utforsk', tabBarIcon: tabIcon('search', 'search-outline') }}
-      />
-      <Tabs.Screen
-        name="bookings"
+        name="requests"
         options={{
-          title: 'Bestillinger',
-          tabBarIcon: tabIcon('calendar', 'calendar-outline'),
+          title: 'Forespørsler',
+          tabBarIcon: tabIcon('notifications-circle', 'notifications-circle-outline'),
         }}
       />
       <Tabs.Screen
-        name="messages"
-        options={{
-          title: 'Meldinger',
-          tabBarIcon: tabIcon('chatbubble', 'chatbubble-outline'),
-        }}
+        name="calendar"
+        options={{ title: 'Kalender', tabBarIcon: tabIcon('calendar', 'calendar-outline') }}
       />
       <Tabs.Screen
-        name="profile"
-        options={{ title: 'Profil', tabBarIcon: tabIcon('person', 'person-outline') }}
+        name="earnings"
+        options={{ title: 'Inntjening', tabBarIcon: tabIcon('cash', 'cash-outline') }}
       />
+      <Tabs.Screen
+        name="profil"
+        options={{
+          title: 'Profil',
+          tabBarIcon: tabIcon('person-circle', 'person-circle-outline'),
+        }}
+      />
+      <Tabs.Screen name="job" options={{ href: null }} />
     </Tabs>
   );
 }
