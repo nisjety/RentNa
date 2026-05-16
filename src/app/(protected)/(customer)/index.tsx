@@ -1,8 +1,8 @@
 import { useUser } from '@clerk/expo';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BookingCard } from '@/components/customer/booking-card';
@@ -23,6 +23,7 @@ export default function CustomerHomeScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
+  const [searchText, setSearchText] = useState('');
 
   const nextUpcomingDoc = useQuery(api.bookings.nextUpcoming);
 
@@ -42,6 +43,14 @@ export default function CustomerHomeScreen() {
 
   const services: ServiceType[] = ['home', 'deep', 'move', 'office'];
 
+  function handleSearchSubmit() {
+    if (searchText.trim()) {
+      router.push({ pathname: '/utforsk', params: { q: searchText.trim() } });
+    } else {
+      router.push('/utforsk');
+    }
+  }
+
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView
@@ -55,13 +64,21 @@ export default function CustomerHomeScreen() {
         </View>
 
         <View style={styles.searchBlock}>
-          <SearchBar />
+          <SearchBar
+            value={searchText}
+            onChangeText={setSearchText}
+            onFilterPress={() => router.push('/utforsk')}
+            onSubmitEditing={handleSearchSubmit}
+          />
         </View>
 
         <View style={styles.servicesRow}>
           {services.map((s, i) => (
             <View key={s} style={{ flex: 1, marginLeft: i === 0 ? 0 : Spacing.two }}>
-              <ServiceTile type={s} onPress={() => router.push('/utforsk')} />
+              <ServiceTile
+                type={s}
+                onPress={() => router.push({ pathname: '/utforsk', params: { service: s } })}
+              />
             </View>
           ))}
         </View>
@@ -82,7 +99,7 @@ export default function CustomerHomeScreen() {
         )}
 
         <View style={styles.section}>
-          <RecurringPromo />
+          <RecurringPromo onSetup={() => router.push({ pathname: '/utforsk', params: { service: 'regular' } })} />
         </View>
       </ScrollView>
     </SafeAreaView>

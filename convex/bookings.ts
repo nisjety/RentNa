@@ -62,6 +62,25 @@ export const cleanerOnTheWay = query({
   },
 });
 
+export const myStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { total: 0, totalKr: 0, recurring: 0 };
+    const bookings = await ctx.db
+      .query('bookings')
+      .withIndex('by_user', (q) => q.eq('userId', identity.subject))
+      .collect();
+    const totalKr = bookings
+      .filter((b) => b.status === 'completed')
+      .reduce((sum, b) => sum + b.totalKr, 0);
+    const recurring = new Set(
+      bookings.filter((b) => b.recurring != null).map((b) => b.cleanerSlug),
+    ).size;
+    return { total: bookings.length, totalKr, recurring };
+  },
+});
+
 export const create = mutation({
   args: {
     cleanerSlug: v.string(),

@@ -1,7 +1,8 @@
 import { useAuth, useUser } from '@clerk/expo';
+import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -10,6 +11,7 @@ import { Icon } from '@/components/ui/icon';
 import { Radius, Spacing, Typography } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useRoleStore } from '@/stores/role-store';
+import { api } from 'convex/_generated/api';
 
 interface RowProps {
   icon: React.ComponentProps<typeof Icon>['name'];
@@ -19,12 +21,23 @@ interface RowProps {
   destructive?: boolean;
 }
 
+function formatKr(n: number): string {
+  if (n === 0) return '0';
+  if (n >= 1000) {
+    const thousands = Math.floor(n / 1000);
+    const remainder = n % 1000;
+    return remainder > 0 ? `${thousands} ${String(remainder).padStart(3, '0')}` : `${thousands} 000`;
+  }
+  return String(n);
+}
+
 export default function ProfileScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { signOut } = useAuth();
   const { user } = useUser();
   const { reset } = useRoleStore();
+  const stats = useQuery(api.bookings.myStats);
 
   const firstName = user?.firstName ?? '';
   const lastName = user?.lastName ?? '';
@@ -47,23 +60,28 @@ export default function ProfileScreen() {
           <View style={{ flex: 1 }}>
             <Text style={[styles.name, { color: theme.text }]}>{fullName}</Text>
             <Text style={[styles.email, { color: theme.textSecondary }]}>{email}</Text>
-            <View style={[styles.pointsPill, { backgroundColor: theme.accent }]}>
-              <Text style={[styles.pointsText, { color: theme.accentText }]}>+ 320 poeng</Text>
-            </View>
           </View>
         </View>
 
         <View style={styles.statsRow}>
-          <Stat value="24" label="Bookinger" />
-          <Stat value="1" label="Fast renholder" />
-          <Stat value="4 290" label="kr i år" accent />
+          {stats === undefined ? (
+            <View style={[styles.stat, { backgroundColor: theme.surface, flex: 1, alignItems: 'center', justifyContent: 'center', height: 64 }]}>
+              <ActivityIndicator size="small" color={theme.textSecondary} />
+            </View>
+          ) : (
+            <>
+              <Stat value={String(stats.total)} label="Bookinger" />
+              <Stat value={String(stats.recurring)} label="Fast renholder" />
+              <Stat value={formatKr(stats.totalKr)} label="kr i år" accent />
+            </>
+          )}
         </View>
 
         <View style={styles.section}>
-          <Row icon="location-outline" label="Adresser" trailing="3 lagrede" />
-          <Row icon="card-outline" label="Betalingsmetoder" trailing="Visa · Kort 4242" />
-          <Row icon="heart-outline" label="Faste renholdere" trailing="1 favoritt · Maja" />
-          <Row icon="globe-outline" label="Språk" trailing="Norsk Bokmål" />
+          <Row icon="location-outline" label="Adresser" />
+          <Row icon="card-outline" label="Betalingsmetoder" />
+          <Row icon="heart-outline" label="Faste renholdere" />
+          <Row icon="globe-outline" label="Språk" />
         </View>
 
         <View style={[styles.proCta, { backgroundColor: theme.text }]}>
@@ -165,14 +183,6 @@ const styles = StyleSheet.create({
   },
   name: { ...Typography.subhead },
   email: { ...Typography.caption, marginTop: 2 },
-  pointsPill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: Radius.pill,
-    marginTop: 6,
-  },
-  pointsText: { ...Typography.micro, fontSize: 10 },
   statsRow: {
     flexDirection: 'row',
     gap: Spacing.two,

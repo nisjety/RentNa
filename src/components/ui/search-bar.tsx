@@ -10,6 +10,7 @@ interface SearchBarProps {
   onChangeText?: (text: string) => void;
   placeholder?: string;
   onFilterPress?: () => void;
+  onSubmitEditing?: () => void;
   style?: ViewStyle;
 }
 
@@ -18,6 +19,7 @@ export function SearchBar({
   onChangeText,
   placeholder = 'Søk tjeneste, område…',
   onFilterPress,
+  onSubmitEditing,
   style,
 }: SearchBarProps) {
   const theme = useTheme();
@@ -33,6 +35,7 @@ export function SearchBar({
           placeholderTextColor={theme.textMuted}
           style={[styles.textInput, { color: theme.text }]}
           returnKeyType="search"
+          onSubmitEditing={onSubmitEditing}
         />
       </View>
       <Pressable
