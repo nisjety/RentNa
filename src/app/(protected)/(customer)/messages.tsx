@@ -81,7 +81,7 @@ export default function MessagesScreen() {
           filtered.map((t) => (
             <Pressable
               key={t._id}
-              onPress={() => router.push(`/cleaner/${t.cleanerSlug}`)}
+              onPress={() => router.push(`/thread/${t._id}`)}
               style={({ pressed }) => [
                 styles.thread,
                 {

@@ -1,10 +1,11 @@
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -57,6 +58,7 @@ export default function CleanerProfileScreen() {
 
   const cleaner = adaptCleaner(cleanerDoc);
   const heroSrc = cleaner.heroImageUrl ?? cleaner.avatarUrl;
+  const isSuspended = cleanerDoc.suspendedAt != null;
 
   return (
     <View style={[styles.root, { backgroundColor: theme.background }]}>
@@ -150,21 +152,27 @@ export default function CleanerProfileScreen() {
         style={[styles.footer, { backgroundColor: theme.background }]}
         edges={['bottom']}>
         <View style={styles.footerRow}>
-          <Pressable
-            onPress={() => router.push('/messages')}
-            style={({ pressed }) => [
-              styles.chatBtn,
-              { backgroundColor: theme.surfaceMuted },
-              pressed && styles.pressed,
-            ]}>
-            <Icon name="chatbubble-outline" size={20} color={theme.text} />
-          </Pressable>
+          <ChatButton cleanerSlug={cleaner.id} cleanerName={cleaner.name} />
           <View style={{ flex: 1 }}>
             <Button
-              label={`Bestill ${cleaner.shortName.replace('.', '')}`}
+              label={
+                isSuspended
+                  ? 'Midlertidig utilgjengelig'
+                  : `Bestill ${cleaner.shortName.replace('.', '')}`
+              }
               variant="primary"
               size="lg"
-              onPress={() => router.push(`/cleaner/${cleaner.id}/book`)}
+              disabled={isSuspended}
+              onPress={() => {
+                if (isSuspended) {
+                  Alert.alert(
+                    'Renholder er suspendert',
+                    'Denne profilen er midlertidig deaktivert. Velg en annen renholder.',
+                  );
+                  return;
+                }
+                router.push(`/cleaner/${cleaner.id}/book`);
+              }}
             />
           </View>
         </View>
@@ -267,3 +275,39 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.85 },
 });
+
+function ChatButton({ cleanerSlug, cleanerName }: { cleanerSlug: string; cleanerName: string }) {
+  const theme = useTheme();
+  const router = useRouter();
+  const getOrCreate = useMutation(api.threads.getOrCreate);
+  const [opening, setOpening] = useState(false);
+
+  async function handlePress() {
+    setOpening(true);
+    try {
+      const threadId = await getOrCreate({ cleanerSlug, cleanerName });
+      router.push(`/thread/${threadId}`);
+    } catch (err) {
+      Alert.alert('Kunne ikke åpne samtale', err instanceof Error ? err.message : 'Ukjent feil');
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  return (
+    <Pressable
+      onPress={handlePress}
+      disabled={opening}
+      style={({ pressed }) => [
+        styles.chatBtn,
+        { backgroundColor: theme.surfaceMuted },
+        pressed && styles.pressed,
+      ]}>
+      {opening ? (
+        <ActivityIndicator size="small" color={theme.text} />
+      ) : (
+        <Icon name="chatbubble-outline" size={20} color={theme.text} />
+      )}
+    </Pressable>
+  );
+}

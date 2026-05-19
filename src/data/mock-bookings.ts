@@ -1,4 +1,12 @@
-export type BookingStatus = 'in_progress' | 'confirmed' | 'upcoming' | 'completed' | 'cancelled';
+export type BookingStatus =
+  | 'in_progress'
+  | 'confirmed'
+  | 'upcoming'
+  | 'completed'
+  | 'cancelled'
+  | 'pending_approval'
+  | 'approved'
+  | 'disputed';
 export type ServiceType = 'home' | 'deep' | 'move' | 'office';
 
 export interface AddOn {

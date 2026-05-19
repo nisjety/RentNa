@@ -11,6 +11,8 @@ export const list = query({
   },
   handler: async (ctx, { service, tag, area, search }) => {
     let cleaners = await ctx.db.query('cleaners').collect();
+    // Hide suspended cleaners from public search
+    cleaners = cleaners.filter((c) => c.suspendedAt == null);
     if (service) cleaners = cleaners.filter((c) => c.services.includes(service));
     if (tag) cleaners = cleaners.filter((c) => c.tags.includes(tag));
     if (area) cleaners = cleaners.filter((c) => c.area === area);

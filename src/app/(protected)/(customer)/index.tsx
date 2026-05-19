@@ -1,18 +1,19 @@
 import { useUser } from '@clerk/expo';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthSetupBannerAuto } from '@/components/agency/auth-setup-banner';
 import { BookingCard } from '@/components/customer/booking-card';
 import { HomeHeader } from '@/components/customer/home-header';
 import { RecurringPromo } from '@/components/customer/recurring-promo';
 import { SectionHeader } from '@/components/customer/section-header';
 import { ServiceTile } from '@/components/customer/service-tile';
 import { Heading } from '@/components/ui/heading';
-import { SearchBar } from '@/components/ui/search-bar';
-import { Spacing } from '@/constants/theme';
+import { Icon } from '@/components/ui/icon';
+import { Radius, Spacing, Typography } from '@/constants/theme';
 import { adaptBooking } from '@/data/adapters';
 import { greeting } from '@/data/mock-user';
 import { useTheme } from '@/hooks/use-theme';
@@ -23,7 +24,6 @@ export default function CustomerHomeScreen() {
   const theme = useTheme();
   const router = useRouter();
   const { user } = useUser();
-  const [searchText, setSearchText] = useState('');
 
   const nextUpcomingDoc = useQuery(api.bookings.nextUpcoming);
 
@@ -43,14 +43,6 @@ export default function CustomerHomeScreen() {
 
   const services: ServiceType[] = ['home', 'deep', 'move', 'office'];
 
-  function handleSearchSubmit() {
-    if (searchText.trim()) {
-      router.push({ pathname: '/utforsk', params: { q: searchText.trim() } });
-    } else {
-      router.push('/utforsk');
-    }
-  }
-
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView
@@ -59,17 +51,28 @@ export default function CustomerHomeScreen() {
         showsVerticalScrollIndicator={false}>
         <HomeHeader greeting={greeting()} firstName={firstName} initials={initials} />
 
+        <AuthSetupBannerAuto />
+
         <View style={styles.titleBlock}>
           <Heading variant="display">Finn ditt{'\n'}perfekte renhold</Heading>
         </View>
 
         <View style={styles.searchBlock}>
-          <SearchBar
-            value={searchText}
-            onChangeText={setSearchText}
-            onFilterPress={() => router.push('/utforsk')}
-            onSubmitEditing={handleSearchSubmit}
-          />
+          <Pressable
+            onPress={() => router.push({ pathname: '/utforsk', params: { focus: '1' } })}
+            style={({ pressed }) => [
+              styles.searchPseudo,
+              { backgroundColor: theme.surface },
+              pressed && { opacity: 0.85 },
+            ]}>
+            <Icon name="search-outline" size={20} color={theme.textSecondary} />
+            <Text style={[styles.searchPseudoText, { color: theme.textMuted }]}>
+              Søk renholder, område, tjeneste…
+            </Text>
+            <View style={[styles.searchFilter, { backgroundColor: theme.surfaceMuted }]}>
+              <Icon name="options-outline" size={18} color={theme.text} />
+            </View>
+          </Pressable>
         </View>
 
         <View style={styles.servicesRow}>
@@ -115,6 +118,16 @@ const styles = StyleSheet.create({
     paddingBottom: Spacing.four,
   },
   searchBlock: { paddingHorizontal: Spacing.four },
+  searchPseudo: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.two,
+    paddingHorizontal: Spacing.four, paddingVertical: 14,
+    borderRadius: Radius.pill,
+  },
+  searchPseudoText: { ...Typography.body, flex: 1 },
+  searchFilter: {
+    width: 36, height: 36, borderRadius: Radius.pill,
+    alignItems: 'center', justifyContent: 'center',
+  },
   servicesRow: {
     flexDirection: 'row',
     paddingHorizontal: Spacing.four,

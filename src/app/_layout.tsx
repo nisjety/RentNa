@@ -5,7 +5,17 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { Slot } from 'expo-router';
 import React from 'react';
-import { useColorScheme } from 'react-native';
+import { LogBox, useColorScheme } from 'react-native';
+
+// Dev-only: hide noisy Convex auth errors while the Clerk JWT template
+// is being set up. They still surface as Alerts where the user expects them.
+if (__DEV__) {
+  LogBox.ignoreLogs([
+    /Ikke autentisert/,
+    /No auth provider found matching the given token/,
+    /Failed to authenticate/,
+  ]);
+}
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { convex } from '@/lib/convex';

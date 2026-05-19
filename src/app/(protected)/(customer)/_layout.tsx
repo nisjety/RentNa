@@ -10,9 +10,11 @@ import { useRoleStore } from '@/stores/role-store';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 function tabIcon(filled: IoniconName, outline: IoniconName) {
-  return ({ color, focused, size }: { color: string; focused: boolean; size: number }) => (
+  const TabBarIcon = ({ color, focused, size }: { color: string; focused: boolean; size: number }) => (
     <Ionicons name={focused ? filled : outline} size={size ?? 24} color={color} />
   );
+  TabBarIcon.displayName = `TabBarIcon(${filled})`;
+  return TabBarIcon;
 }
 
 export default function CustomerTabsLayout() {

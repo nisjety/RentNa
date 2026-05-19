@@ -1,6 +1,7 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { LiveStatusPill } from '@/components/customer/live-status-dot';
 import { Avatar } from '@/components/ui/avatar';
 import { Pill } from '@/components/ui/pill';
 import { Radius, Spacing, Typography } from '@/constants/theme';
@@ -46,9 +47,12 @@ export function CleanerListCard({ cleaner, onPress, onBook }: Props) {
             {cleaner.area} · {cleaner.yearsExperience} år
           </Text>
 
-          <Text style={[styles.rating, { color: theme.textSecondary }]} numberOfLines={1}>
-            ★ {cleaner.rating.toFixed(2)}  ({cleaner.reviewCount})
-          </Text>
+          <View style={styles.ratingRow}>
+            <Text style={[styles.rating, { color: theme.textSecondary }]} numberOfLines={1}>
+              ★ {cleaner.rating.toFixed(2)}  ({cleaner.reviewCount})
+            </Text>
+            <LiveStatusPill cleanerSlug={cleaner.id} hideWhenOffline />
+          </View>
 
           <View style={styles.footer}>
             <Text
@@ -93,6 +97,7 @@ const styles = StyleSheet.create({
   priceUnit: { ...Typography.caption, fontWeight: '500' },
   meta: { ...Typography.caption },
   rating: { ...Typography.caption },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, marginTop: 2 },
   footer: {
     flexDirection: 'row',
     alignItems: 'center',

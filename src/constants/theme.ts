@@ -103,7 +103,7 @@ export const Radius = {
 } as const;
 
 export const Typography = {
-  display:    { fontSize: 28, lineHeight: 32, fontWeight: '700' as const, letterSpacing: -0.8 },
+  display:    { fontSize: 26, lineHeight: 31, fontWeight: '700' as const, letterSpacing: -0.6 },
   title:      { fontSize: 22, lineHeight: 26, fontWeight: '600' as const, letterSpacing: -0.5 },
   headline:   { fontSize: 17, lineHeight: 22, fontWeight: '600' as const, letterSpacing: -0.3 },
   subhead:    { fontSize: 15, lineHeight: 20, fontWeight: '600' as const, letterSpacing: -0.2 },
