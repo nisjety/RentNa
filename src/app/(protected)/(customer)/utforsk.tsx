@@ -2,7 +2,7 @@ import { useQuery, useMutation } from 'convex/react';
 import { FlashList } from '@shopify/flash-list';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CleanerListCard } from '@/components/customer/cleaner-list-card';
@@ -45,13 +45,22 @@ const SERVICE_PARAM_MAP: Record<string, string> = {
 export default function UtforskScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const params = useLocalSearchParams<{ q?: string; service?: string }>();
+  const params = useLocalSearchParams<{ q?: string; service?: string; focus?: string }>();
 
   // Initialise filters from params passed by home screen
   const initialService = params.service ? (SERVICE_PARAM_MAP[params.service] ?? undefined) : undefined;
   const [activeService, setActiveService] = useState<string | undefined>(initialService);
   const [activeTag, setActiveTag] = useState<string | undefined>();
   const [searchText, setSearchText] = useState(params.q ?? '');
+  const searchInputRef = useRef<TextInput>(null);
+
+  // Auto-focus when arriving from home screen
+  useEffect(() => {
+    if (params.focus === '1') {
+      const t = setTimeout(() => searchInputRef.current?.focus(), 250);
+      return () => clearTimeout(t);
+    }
+  }, [params.focus]);
 
   const cleanerDocs = useQuery(api.cleaners.list, {
     service: activeService,
@@ -124,6 +133,7 @@ export default function UtforskScreen() {
 
         <View style={{ flex: 1 }}>
           <SearchBar
+            inputRef={searchInputRef}
             value={searchText}
             onChangeText={setSearchText}
             placeholder="Søk renholder, område…"
@@ -202,6 +212,7 @@ export default function UtforskScreen() {
       )}
 
       <Pressable
+        onPress={() => router.push('/kart')}
         style={({ pressed }) => [
           styles.mapBtn,
           { backgroundColor: theme.text },

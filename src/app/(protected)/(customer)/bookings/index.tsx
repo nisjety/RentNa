@@ -14,8 +14,18 @@ import { api } from 'convex/_generated/api';
 
 type Tab = 'upcoming' | 'past';
 
-const UPCOMING_STATUSES = new Set(['in_progress', 'confirmed', 'upcoming']);
-const PAST_STATUSES = new Set(['completed', 'cancelled']);
+const UPCOMING_STATUSES = new Set([
+  'in_progress',
+  'confirmed',
+  'upcoming',
+  'pending_approval',
+]);
+const PAST_STATUSES = new Set([
+  'completed',
+  'cancelled',
+  'approved',
+  'disputed',
+]);
 
 export default function BookingsListScreen() {
   const theme = useTheme();

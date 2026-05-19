@@ -1,6 +1,8 @@
 import { useAuth } from '@clerk/expo';
 import { Redirect, Stack } from 'expo-router';
 
+import { PushRegistrar } from '@/components/push-registrar';
+
 export default function ProtectedLayout() {
   const { isSignedIn, isLoaded } = useAuth();
 
@@ -11,6 +13,9 @@ export default function ProtectedLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }} />
+    <>
+      <PushRegistrar />
+      <Stack screenOptions={{ headerShown: false }} />
+    </>
   );
 }

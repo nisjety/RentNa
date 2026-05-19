@@ -35,11 +35,30 @@ const STATUS_LABEL: Record<BookingStatus, string> = {
   upcoming: 'Kommende',
   completed: 'Fullført',
   cancelled: 'Avlyst',
+  pending_approval: 'Venter godkjenning',
+  approved: 'Godkjent',
+  disputed: 'Under behandling',
+};
+
+const STATUS_TONE: Record<BookingStatus, PillProps['tone']> = {
+  in_progress: 'accent',
+  confirmed: 'info',
+  upcoming: 'info',
+  completed: 'neutral',
+  cancelled: 'neutral',
+  pending_approval: 'accent',
+  approved: 'neutral',
+  disputed: 'neutral',
 };
 
 export function StatusPill({ status, style }: { status: BookingStatus; style?: ViewStyle }) {
-  const tone: PillProps['tone'] = status === 'cancelled' ? 'neutral' : 'info';
-  return <Pill label={STATUS_LABEL[status]} tone={tone} style={style} />;
+  return (
+    <Pill
+      label={STATUS_LABEL[status] ?? status}
+      tone={STATUS_TONE[status] ?? 'neutral'}
+      style={style}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

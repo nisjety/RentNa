@@ -1,33 +1,47 @@
+import { useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
 import { Pill } from '@/components/ui/pill';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import { getJobById, type ChecklistItem } from '@/data/mock-cleaner-jobs';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from 'convex/_generated/api';
+import type { Doc, Id } from 'convex/_generated/dataModel';
 
 function fmtTime(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+type ChecklistItem = Doc<'cleanerJobs'>['checklist'][number];
+
 export default function JobDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const theme = useTheme();
-
-  const job = getJobById(id ?? '');
-
-  const [checklist, setChecklist] = useState<ChecklistItem[]>(
-    job?.checklistItems ?? [],
+  const job = useQuery(
+    api.cleanerPro.getJob,
+    id ? { jobId: id as Id<'cleanerJobs'> } : 'skip',
   );
-  const [finished, setFinished] = useState(false);
+  const toggleItem = useMutation(api.cleanerPro.toggleChecklistItem);
+  const markComplete = useMutation(api.cleanerPro.markJobComplete);
+  const [completing, setCompleting] = useState(false);
 
-  if (!job) {
+  if (job === undefined) {
+    return (
+      <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
+        <View style={styles.notFound}>
+          <ActivityIndicator color={theme.textSecondary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (job === null) {
     return (
       <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top', 'bottom']}>
         <View style={styles.notFound}>
@@ -45,21 +59,35 @@ export default function JobDetailScreen() {
     new Date(new Date(job.startsAt).getTime() + job.durationHours * 3600000).toISOString(),
   );
 
+  const checklist = job.checklist;
   const doneCount = checklist.filter((c) => c.done).length;
   const totalCount = checklist.length;
   const allDone = totalCount > 0 && doneCount === totalCount;
-
   const rooms = Array.from(new Set(checklist.map((c) => c.room)));
 
-  function toggleItem(itemId: string) {
-    setChecklist((prev) =>
-      prev.map((c) => (c.id === itemId ? { ...c, done: !c.done } : c)),
-    );
+  async function handleToggle(itemId: string) {
+    try {
+      await toggleItem({ jobId: job!._id, itemId });
+    } catch (err) {
+      Alert.alert('Kunne ikke oppdatere', err instanceof Error ? err.message : 'Ukjent feil');
+    }
   }
+
+  async function handleComplete() {
+    setCompleting(true);
+    try {
+      await markComplete({ jobId: job!._id });
+    } catch (err) {
+      Alert.alert('Kunne ikke fullføre', err instanceof Error ? err.message : 'Ukjent feil');
+    } finally {
+      setCompleting(false);
+    }
+  }
+
+  const isCompleted = job.status === 'completed';
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable
           onPress={() => router.back()}
@@ -74,14 +102,18 @@ export default function JobDetailScreen() {
           </Text>
         </View>
         <Pill
-          label={job.status === 'in_progress' ? 'Pågår' : job.status === 'completed' ? 'Fullført' : 'Kommende'}
+          label={
+            job.status === 'in_progress'
+              ? 'Pågår'
+              : job.status === 'completed'
+                ? 'Fullført'
+                : 'Kommende'
+          }
           tone={job.status === 'in_progress' ? 'accent' : 'neutral'}
         />
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* Job info cards */}
         <View style={styles.infoRow}>
           <InfoChip icon="time-outline" label={`${fmtTime(job.startsAt)}–${endTime}`} />
           <InfoChip icon="briefcase-outline" label={job.service} />
@@ -112,8 +144,7 @@ export default function JobDetailScreen() {
           </View>
         )}
 
-        {/* Checklist */}
-        {checklist.length > 0 && (
+        {checklist.length > 0 ? (
           <>
             <View style={styles.checklistHeader}>
               <Text style={[styles.checklistTitle, { color: theme.text }]}>Sjekkliste</Text>
@@ -122,7 +153,6 @@ export default function JobDetailScreen() {
               </Text>
             </View>
 
-            {/* Progress bar */}
             <View style={[styles.progressTrack, { backgroundColor: theme.surfaceMuted }]}>
               <View
                 style={[
@@ -141,14 +171,16 @@ export default function JobDetailScreen() {
                 {checklist
                   .filter((c) => c.room === room)
                   .map((item) => (
-                    <CheckRow key={item.id} item={item} onToggle={() => toggleItem(item.id)} />
+                    <CheckRow
+                      key={item.id}
+                      item={item}
+                      onToggle={() => handleToggle(item.id)}
+                    />
                   ))}
               </View>
             ))}
           </>
-        )}
-
-        {checklist.length === 0 && (
+        ) : (
           <View style={[styles.noChecklist, { backgroundColor: theme.surface }]}>
             <Icon name="list-outline" size={24} color={theme.textMuted} />
             <Text style={[styles.noChecklistText, { color: theme.textSecondary }]}>
@@ -157,27 +189,30 @@ export default function JobDetailScreen() {
           </View>
         )}
 
-        {/* Finish button */}
         {job.status === 'in_progress' && (
           <View style={styles.finishSection}>
-            {finished ? (
-              <View style={[styles.finishedBanner, { backgroundColor: '#3D9970' + '22' }]}>
-                <Icon name="checkmark-circle" size={20} color="#3D9970" />
-                <Text style={[styles.finishedText, { color: '#3D9970' }]}>
-                  Oppdrag fullført — kunden varsles
-                </Text>
-              </View>
-            ) : (
-              <Button
-                label={allDone || checklist.length === 0 ? 'Merk som fullført' : `Fullfør (${doneCount}/${totalCount})`}
-                variant="primary"
-                size="lg"
-                onPress={() => setFinished(true)}
-              />
-            )}
+            <Button
+              label={
+                allDone || checklist.length === 0
+                  ? 'Merk som fullført'
+                  : `Fullfør (${doneCount}/${totalCount})`
+              }
+              variant="primary"
+              size="lg"
+              loading={completing}
+              onPress={handleComplete}
+            />
           </View>
         )}
 
+        {isCompleted && (
+          <View style={[styles.finishedBanner, { backgroundColor: '#3D9970' + '22', marginHorizontal: Spacing.four, marginTop: Spacing.five }]}>
+            <Icon name="checkmark-circle" size={20} color="#3D9970" />
+            <Text style={[styles.finishedText, { color: '#3D9970' }]}>
+              Oppdrag fullført — kunden varsles
+            </Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -230,125 +265,36 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   notFound: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.three },
   notFoundText: { ...Typography.body },
-
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.three,
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.three,
+    paddingHorizontal: Spacing.four, paddingVertical: Spacing.three,
   },
   backBtn: { width: 36, alignItems: 'center' },
   headerTitle: { ...Typography.subhead, fontWeight: '700' },
   headerSub: { ...Typography.caption, marginTop: 2 },
-
   scroll: { paddingBottom: Spacing.ten },
-
-  infoRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.four,
-    marginBottom: Spacing.three,
-  },
-  infoChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    padding: Spacing.three,
-    borderRadius: Radius.md,
-    justifyContent: 'center',
-  },
+  infoRow: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.four, marginBottom: Spacing.three },
+  infoChip: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, padding: Spacing.three, borderRadius: Radius.md, justifyContent: 'center' },
   infoChipText: { ...Typography.caption, fontWeight: '600' },
-
-  accessCard: {
-    marginHorizontal: Spacing.four,
-    borderRadius: Radius.lg,
-    padding: Spacing.three,
-    gap: Spacing.two,
-    marginBottom: Spacing.three,
-  },
+  accessCard: { marginHorizontal: Spacing.four, borderRadius: Radius.lg, padding: Spacing.three, gap: Spacing.two, marginBottom: Spacing.three },
   accessRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two },
   accessText: { ...Typography.callout },
   accessCode: { ...Typography.callout, fontWeight: '700', letterSpacing: 1 },
-
-  notesCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: Spacing.two,
-    marginHorizontal: Spacing.four,
-    padding: Spacing.three,
-    borderRadius: Radius.lg,
-    marginBottom: Spacing.three,
-  },
+  notesCard: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two, marginHorizontal: Spacing.four, padding: Spacing.three, borderRadius: Radius.lg, marginBottom: Spacing.three },
   notesText: { ...Typography.caption, flex: 1 },
-
-  checklistHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.four,
-    marginBottom: Spacing.two,
-    marginTop: Spacing.two,
-  },
+  checklistHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: Spacing.four, marginBottom: Spacing.two, marginTop: Spacing.two },
   checklistTitle: { ...Typography.subhead, fontWeight: '600' },
   checklistCount: { ...Typography.callout },
-
-  progressTrack: {
-    height: 4,
-    marginHorizontal: Spacing.four,
-    borderRadius: Radius.pill,
-    marginBottom: Spacing.four,
-    overflow: 'hidden',
-  },
+  progressTrack: { height: 4, marginHorizontal: Spacing.four, borderRadius: Radius.pill, marginBottom: Spacing.four, overflow: 'hidden' },
   progressFill: { height: '100%', borderRadius: Radius.pill },
-
   roomSection: { marginBottom: Spacing.three },
-  roomLabel: {
-    ...Typography.micro,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingHorizontal: Spacing.four,
-    marginBottom: Spacing.two,
-  },
-
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingHorizontal: Spacing.four,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderRadius: Radius.xs,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  roomLabel: { ...Typography.micro, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: Spacing.four, marginBottom: Spacing.two },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, paddingHorizontal: Spacing.four, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth },
+  checkbox: { width: 24, height: 24, borderRadius: Radius.xs, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   checkLabel: { ...Typography.body, flex: 1 },
-
-  noChecklist: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    marginHorizontal: Spacing.four,
-    padding: Spacing.four,
-    borderRadius: Radius.lg,
-    marginTop: Spacing.three,
-  },
+  noChecklist: { flexDirection: 'row', alignItems: 'center', gap: Spacing.three, marginHorizontal: Spacing.four, padding: Spacing.four, borderRadius: Radius.lg, marginTop: Spacing.three },
   noChecklistText: { ...Typography.body },
-
   finishSection: { marginHorizontal: Spacing.four, marginTop: Spacing.five },
-  finishedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.two,
-    padding: Spacing.four,
-    borderRadius: Radius.lg,
-  },
-  finishedText: { ...Typography.subhead, fontWeight: '600' },
+  finishedBanner: { flexDirection: 'row', alignItems: 'center', gap: Spacing.two, padding: Spacing.three, borderRadius: Radius.md },
+  finishedText: { ...Typography.callout, fontWeight: '600' },
 });

@@ -1,14 +1,19 @@
+import { useAuth, useUser } from '@clerk/expo';
+import { useMutation, useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AuthSetupBanner } from '@/components/agency/auth-setup-banner';
+import { StatusToggle } from '@/components/cleaner-pro/status-toggle';
 import { Avatar } from '@/components/ui/avatar';
 import { Icon } from '@/components/ui/icon';
 import { Pill } from '@/components/ui/pill';
 import { Radius, Spacing, Typography } from '@/constants/theme';
-import { mockCleanerJobs, type CleanerJob } from '@/data/mock-cleaner-jobs';
 import { useTheme } from '@/hooks/use-theme';
+import { api } from 'convex/_generated/api';
+import type { Doc } from 'convex/_generated/dataModel';
 
 const DAY_NAMES = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
 const MONTH_NAMES = [
@@ -26,13 +31,15 @@ function fmtEndTime(iso: string, durationHours: number): string {
   return fmtTime(end.toISOString());
 }
 
-const JOB_STATUS_LABEL: Record<CleanerJob['status'], string> = {
+type JobStatus = 'completed' | 'in_progress' | 'upcoming';
+
+const JOB_STATUS_LABEL: Record<JobStatus, string> = {
   completed: 'Fullført',
   in_progress: 'Pågår',
   upcoming: 'Kommende',
 };
 
-const JOB_STATUS_TONE: Record<CleanerJob['status'], 'info' | 'accent' | 'neutral'> = {
+const JOB_STATUS_TONE: Record<JobStatus, 'info' | 'accent' | 'neutral'> = {
   completed: 'neutral',
   in_progress: 'accent',
   upcoming: 'info',
@@ -41,11 +48,39 @@ const JOB_STATUS_TONE: Record<CleanerJob['status'], 'info' | 'accent' | 'neutral
 export default function CleanerTodayScreen() {
   const theme = useTheme();
   const router = useRouter();
+  const { user } = useUser();
+  const { isSignedIn } = useAuth();
 
-  const jobs = mockCleanerJobs;
-  const activeJob = jobs.find((j) => j.status === 'in_progress');
-  const totalKr = jobs.reduce((s, j) => s + j.totalKr, 0);
-  const completedCount = jobs.filter((j) => j.status === 'completed').length;
+  const profile = useQuery(api.cleanerPro.getMyProfile);
+  const jobs = useQuery(api.cleanerPro.todayJobs);
+  const stats = useQuery(api.cleanerPro.dayStats);
+  const activeJob = useQuery(api.cleanerPro.activeJob);
+  const ensureProfile = useMutation(api.cleanerPro.ensureProfile);
+  const seedCleaner = useMutation(api.seed.seedCleanerWorkspace);
+
+  const [seedAttempted, setSeedAttempted] = useState(false);
+  useEffect(() => {
+    if (seedAttempted) return;
+    if (profile === undefined) return;
+    if (profile === null) {
+      setSeedAttempted(true);
+      ensureProfile({})
+        .then((created) => {
+          if (created) return seedCleaner({});
+        })
+        .catch((err) => console.warn('Cleaner seed failed:', err));
+      return;
+    }
+    if (jobs !== undefined && jobs.length === 0) {
+      setSeedAttempted(true);
+      seedCleaner({}).catch((err) => console.warn('Cleaner seed failed:', err));
+    }
+  }, [profile, jobs, seedAttempted, ensureProfile, seedCleaner]);
+
+  const loading = profile === undefined || jobs === undefined || stats === undefined;
+  const showAuthBanner = isSignedIn && profile === null && seedAttempted;
+  const firstName = user?.firstName ?? profile?.cleaner?.shortName?.split(' ')[0] ?? 'Renholder';
+  const initials = profile?.cleaner?.initials ?? user?.firstName?.[0]?.toUpperCase() ?? '?';
 
   const now = new Date();
   const todayLabel = `${DAY_NAMES[now.getDay()]} ${now.getDate()}. ${MONTH_NAMES[now.getMonth()]}`;
@@ -53,27 +88,37 @@ export default function CleanerTodayScreen() {
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: theme.background }]} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-
-        {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={[styles.greeting, { color: theme.text }]}>God dag, Maja</Text>
+            <Text style={[styles.greeting, { color: theme.text }]}>God dag, {firstName}</Text>
             <Text style={[styles.date, { color: theme.textSecondary }]}>{todayLabel}</Text>
           </View>
-          <Avatar initials="ML" size={42} tone="taupe" />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <InboxButton />
+            <Avatar initials={initials} size={42} tone="taupe" />
+          </View>
         </View>
 
-        {/* Quick stats */}
+        {showAuthBanner && <AuthSetupBanner />}
+
+        <StatusToggle />
+
         <View style={styles.statsRow}>
-          <StatCard value={`${totalKr.toLocaleString('nb-NO')} kr`} label="Inntekt i dag" accent />
-          <StatCard value={String(jobs.length)} label="Oppdrag" />
-          <StatCard value={`${completedCount}/${jobs.length}`} label="Fullført" />
+          <StatCard
+            value={`${(stats?.totalKr ?? 0).toLocaleString('nb-NO')} kr`}
+            label="Inntekt i dag"
+            accent
+          />
+          <StatCard value={String(stats?.jobsCount ?? 0)} label="Oppdrag" />
+          <StatCard
+            value={`${stats?.completedCount ?? 0}/${stats?.jobsCount ?? 0}`}
+            label="Fullført"
+          />
         </View>
 
-        {/* Active job banner */}
         {activeJob && (
           <Pressable
-            onPress={() => router.push(`/pro/job/${activeJob.id}`)}
+            onPress={() => router.push(`/pro/job/${activeJob._id}`)}
             style={({ pressed }) => [
               styles.activeBanner,
               { backgroundColor: theme.accent },
@@ -92,22 +137,34 @@ export default function CleanerTodayScreen() {
           </Pressable>
         )}
 
-        {/* Timeline */}
         <View style={styles.sectionRow}>
           <Text style={[styles.sectionTitle, { color: theme.text }]}>Dagens plan</Text>
         </View>
 
-        <View style={styles.timeline}>
-          {jobs.map((job, idx) => (
-            <TimelineRow
-              key={job.id}
-              job={job}
-              isLast={idx === jobs.length - 1}
-              onPress={() => router.push(`/pro/job/${job.id}`)}
-            />
-          ))}
-        </View>
-
+        {loading ? (
+          <View style={styles.loadingCenter}>
+            <ActivityIndicator color={theme.textSecondary} />
+          </View>
+        ) : jobs.length === 0 ? (
+          <View style={styles.emptyBlock}>
+            <Icon name="calendar-outline" size={36} color={theme.textMuted} />
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>Ingen oppdrag i dag</Text>
+            <Text style={[styles.emptyBody, { color: theme.textSecondary }]}>
+              Sjekk forespørsler for å se nye muligheter.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.timeline}>
+            {jobs.map((job, idx) => (
+              <TimelineRow
+                key={job._id}
+                job={job}
+                isLast={idx === jobs.length - 1}
+                onPress={() => router.push(`/pro/job/${job._id}`)}
+              />
+            ))}
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,17 +175,14 @@ function TimelineRow({
   isLast,
   onPress,
 }: {
-  job: CleanerJob;
+  job: Doc<'cleanerJobs'>;
   isLast: boolean;
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const status = job.status as JobStatus;
   const dotColor =
-    job.status === 'in_progress'
-      ? theme.accent
-      : job.status === 'completed'
-        ? '#3D9970'
-        : theme.surfaceMuted;
+    status === 'in_progress' ? theme.accent : status === 'completed' ? '#3D9970' : theme.surfaceMuted;
 
   return (
     <View style={styles.tlRow}>
@@ -144,7 +198,7 @@ function TimelineRow({
         style={({ pressed }) => [
           styles.jobCard,
           { backgroundColor: theme.surface },
-          job.status === 'in_progress' && { borderLeftWidth: 3, borderLeftColor: theme.accent },
+          status === 'in_progress' && { borderLeftWidth: 3, borderLeftColor: theme.accent },
           pressed && { opacity: 0.85 },
         ]}>
         <View style={styles.jobTop}>
@@ -154,7 +208,7 @@ function TimelineRow({
               {job.address} · {job.area}
             </Text>
           </View>
-          <Pill label={JOB_STATUS_LABEL[job.status]} tone={JOB_STATUS_TONE[job.status]} />
+          <Pill label={JOB_STATUS_LABEL[status]} tone={JOB_STATUS_TONE[status]} />
         </View>
         <View style={styles.jobMeta}>
           <Icon name="time-outline" size={13} color={theme.textMuted} />
@@ -170,17 +224,9 @@ function TimelineRow({
 function StatCard({ value, label, accent }: { value: string; label: string; accent?: boolean }) {
   const theme = useTheme();
   return (
-    <View
-      style={[
-        styles.statCard,
-        { backgroundColor: accent ? theme.accent : theme.surface },
-      ]}>
-      <Text style={[styles.statValue, { color: accent ? theme.accentText : theme.text }]}>
-        {value}
-      </Text>
-      <Text style={[styles.statLabel, { color: accent ? theme.accentText : theme.textSecondary }]}>
-        {label}
-      </Text>
+    <View style={[styles.statCard, { backgroundColor: accent ? theme.accent : theme.surface }]}>
+      <Text style={[styles.statValue, { color: accent ? theme.accentText : theme.text }]}>{value}</Text>
+      <Text style={[styles.statLabel, { color: accent ? theme.accentText : theme.textSecondary }]}>{label}</Text>
     </View>
   );
 }
@@ -188,73 +234,78 @@ function StatCard({ value, label, accent }: { value: string; label: string; acce
 const styles = StyleSheet.create({
   root: { flex: 1 },
   scroll: { paddingBottom: Spacing.ten },
-
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-    paddingBottom: Spacing.four,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.four, paddingTop: Spacing.three, paddingBottom: Spacing.four,
   },
   greeting: { ...Typography.title },
   date: { ...Typography.callout, marginTop: 2 },
-
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.four,
-    marginBottom: Spacing.four,
-  },
-  statCard: {
-    flex: 1,
-    padding: Spacing.three,
-    borderRadius: Radius.lg,
-    gap: 2,
-  },
+  statsRow: { flexDirection: 'row', gap: Spacing.two, paddingHorizontal: Spacing.four, marginBottom: Spacing.four },
+  statCard: { flex: 1, padding: Spacing.three, borderRadius: Radius.lg, gap: 2 },
   statValue: { ...Typography.headline, fontWeight: '700' },
   statLabel: { ...Typography.caption },
-
   activeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginHorizontal: Spacing.four,
-    marginBottom: Spacing.four,
-    padding: Spacing.four,
-    borderRadius: Radius.lg,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: Spacing.four, marginBottom: Spacing.four,
+    padding: Spacing.four, borderRadius: Radius.lg,
   },
   bannerLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: Spacing.two },
   bannerText: { flex: 1 },
   bannerTitle: { ...Typography.subhead, fontWeight: '600' },
   bannerSub: { ...Typography.caption, marginTop: 2 },
-
   sectionRow: { paddingHorizontal: Spacing.four, marginBottom: Spacing.three },
   sectionTitle: { ...Typography.subhead, fontWeight: '600' },
-
   timeline: { paddingHorizontal: Spacing.four, gap: 0 },
-
   tlRow: { flexDirection: 'row', gap: Spacing.three, marginBottom: Spacing.three },
   tlLeft: { width: 44, alignItems: 'flex-end', paddingTop: 13 },
   tlTime: { ...Typography.caption, fontVariant: ['tabular-nums'] },
   tlLine: { flex: 1, width: 1, marginTop: 4, marginBottom: -Spacing.three },
-  tlDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginTop: 15,
-    flexShrink: 0,
-  },
-
-  jobCard: {
-    flex: 1,
-    padding: Spacing.three,
-    borderRadius: Radius.md,
-    gap: Spacing.two,
-  },
+  tlDot: { width: 10, height: 10, borderRadius: 5, marginTop: 15, flexShrink: 0 },
+  jobCard: { flex: 1, padding: Spacing.three, borderRadius: Radius.md, gap: Spacing.two },
   jobTop: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.two },
   jobName: { ...Typography.bodyMedium },
   jobAddress: { ...Typography.caption, marginTop: 2 },
   jobMeta: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   jobMetaText: { ...Typography.caption },
+  loadingCenter: { paddingVertical: Spacing.eight, alignItems: 'center' },
+  emptyBlock: { alignItems: 'center', paddingHorizontal: Spacing.six, paddingVertical: Spacing.eight, gap: Spacing.two },
+  emptyTitle: { ...Typography.subhead, fontWeight: '600', marginTop: Spacing.two },
+  emptyBody: { ...Typography.callout, textAlign: 'center' },
+  inboxBtn: {
+    width: 42, height: 42, borderRadius: 21,
+    alignItems: 'center', justifyContent: 'center',
+    position: 'relative',
+  },
+  inboxBadge: {
+    position: 'absolute', top: 4, right: 4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  inboxBadgeText: { ...Typography.micro, fontWeight: '700', fontSize: 10 },
 });
+
+function InboxButton() {
+  const theme = useTheme();
+  const router = useRouter();
+  const unread = useQuery(api.threads.unreadCount);
+  return (
+    <Pressable
+      onPress={() => router.push('/inbox')}
+      hitSlop={10}
+      style={({ pressed }) => [
+        styles.inboxBtn,
+        { backgroundColor: theme.surface },
+        pressed && { opacity: 0.7 },
+      ]}>
+      <Icon name="chatbubble-outline" size={20} color={theme.text} />
+      {unread != null && unread > 0 && (
+        <View style={[styles.inboxBadge, { backgroundColor: theme.accent }]}>
+          <Text style={[styles.inboxBadgeText, { color: theme.accentText }]}>
+            {unread > 9 ? '9+' : String(unread)}
+          </Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}

@@ -2,7 +2,7 @@ import { useAuth, useUser } from '@clerk/expo';
 import { useQuery } from 'convex/react';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -55,13 +55,20 @@ export default function ProfileScreen() {
           <Heading variant="title">Profil</Heading>
         </View>
 
-        <View style={[styles.hero, { backgroundColor: theme.surface }]}>
+        <Pressable
+          onPress={() => router.push('/profile/edit')}
+          style={({ pressed }) => [
+            styles.hero,
+            { backgroundColor: theme.surface },
+            pressed && styles.pressed,
+          ]}>
           <Avatar uri={avatarUrl} initials={initials} size={56} tone="taupe" />
           <View style={{ flex: 1 }}>
             <Text style={[styles.name, { color: theme.text }]}>{fullName}</Text>
             <Text style={[styles.email, { color: theme.textSecondary }]}>{email}</Text>
           </View>
-        </View>
+          <Icon name="chevron-forward" size={18} color={theme.textMuted} />
+        </Pressable>
 
         <View style={styles.statsRow}>
           {stats === undefined ? (
@@ -78,10 +85,59 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <Row icon="location-outline" label="Adresser" />
-          <Row icon="card-outline" label="Betalingsmetoder" />
-          <Row icon="heart-outline" label="Faste renholdere" />
-          <Row icon="globe-outline" label="Språk" />
+          <Row
+            icon="location-outline"
+            label="Adresser"
+            onPress={() => router.push('/profile/addresses')}
+          />
+          <Row
+            icon="card-outline"
+            label="Betalingsmetoder"
+            onPress={() => router.push('/profile/payment')}
+          />
+          <Row
+            icon="heart-outline"
+            label="Faste renholdere"
+            onPress={() => router.push('/profile/favorites')}
+          />
+          <Row
+            icon="globe-outline"
+            label="Språk"
+            trailing="Norsk"
+            onPress={() =>
+              Alert.alert(
+                'Språk',
+                'Endre språk i Innstillinger på telefonen.',
+                [
+                  { text: 'Avbryt', style: 'cancel' },
+                  { text: 'Åpne Innstillinger', onPress: () => Linking.openSettings() },
+                ],
+              )
+            }
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Row
+            icon="notifications-outline"
+            label="Varsler"
+            onPress={() =>
+              Alert.alert('Varsler', 'Varsel-innstillinger styres i iOS-innstillingene.', [
+                { text: 'Avbryt', style: 'cancel' },
+                { text: 'Åpne', onPress: () => Linking.openSettings() },
+              ])
+            }
+          />
+          <Row
+            icon="help-circle-outline"
+            label="Hjelp & support"
+            onPress={() => Linking.openURL('mailto:hjelp@rentna.no')}
+          />
+          <Row
+            icon="document-text-outline"
+            label="Vilkår & personvern"
+            onPress={() => Linking.openURL('https://rentna.no/vilkar')}
+          />
         </View>
 
         <View style={[styles.proCta, { backgroundColor: theme.text }]}>
@@ -112,7 +168,12 @@ export default function ProfileScreen() {
             icon="log-out-outline"
             label="Logg ut"
             destructive
-            onPress={() => signOut()}
+            onPress={() =>
+              Alert.alert('Logg ut', 'Er du sikker?', [
+                { text: 'Avbryt', style: 'cancel' },
+                { text: 'Logg ut', style: 'destructive', onPress: () => signOut() },
+              ])
+            }
           />
         </View>
       </ScrollView>

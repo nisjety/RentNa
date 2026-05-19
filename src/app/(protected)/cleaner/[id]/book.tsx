@@ -1,8 +1,12 @@
-import { useMutation, useQuery } from 'convex/react';
+import { useUser } from '@clerk/expo';
+import { useAction, useMutation, useQuery } from 'convex/react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import React, { useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { AirbnbCalendar } from '@/components/ui/airbnb-calendar';
 import { Avatar } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/components/ui/icon';
@@ -90,8 +95,10 @@ export default function BookScreen() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
 
+  const { user } = useUser();
   const cleanerDoc = useQuery(api.cleaners.getBySlug, id ? { slug: id } : 'skip');
   const createBooking = useMutation(api.bookings.create);
+  const initiateVipps = useAction(api.vipps.initiatePayment);
 
   const cleaner = cleanerDoc ? adaptCleaner(cleanerDoc) : undefined;
 
@@ -112,13 +119,6 @@ export default function BookScreen() {
       setService(cleaner.services[0] as CleanerService);
     }
   }
-
-  const dates = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1 + i);
-    d.setHours(0, 0, 0, 0);
-    return d;
-  });
 
   const duration = SERVICE_DURATION[service];
   const basePrice = Math.round(duration * (cleaner?.hourlyRateKr ?? 380));
@@ -155,13 +155,42 @@ export default function BookScreen() {
           totalKr: totalPrice,
           recurring: frequency === 'once' ? undefined : frequency,
           addOns: [],
-          paymentBrand: 'visa',
-          paymentLast4: '4242',
+          paymentBrand: 'vipps',
+          paymentLast4: '',
         });
+
+        // Kick off Vipps payment — opens redirectUrl in a browser modal
+        const phone =
+          user?.primaryPhoneNumber?.phoneNumber?.replace(/\s/g, '') ?? '4791234567';
+        try {
+          const { redirectUrl } = await initiateVipps({
+            bookingId: ref,
+            phoneNumber: phone,
+          });
+          await WebBrowser.openAuthSessionAsync(redirectUrl, undefined, {
+            preferEphemeralSession: false,
+          });
+        } catch (err) {
+          // Even if Vipps fails, the booking exists — let user retry from detail.
+          console.warn('Vipps init failed:', err);
+          Alert.alert(
+            'Vipps-kobling feilet',
+            (err instanceof Error ? err.message : 'Ukjent feil') +
+              '\n\nBookingen er reservert. Du kan prøve betaling igjen fra bookingdetaljene.',
+          );
+        }
         setConfirmedRef(String(ref));
         setConfirmed(true);
       } catch (err) {
-        console.error('Booking failed:', err);
+        const message = err instanceof Error ? err.message : 'Ukjent feil';
+        const isAuthError = /autentisert|unauthenticated|not authenticated/i.test(message);
+        if (!isAuthError) console.warn('Booking failed:', err);
+        Alert.alert(
+          isAuthError ? 'Pålogging kreves' : 'Booking feilet',
+          isAuthError
+            ? 'Konfigurer Clerk JWT-malen "convex" (Claims: { "aud": "convex" }) og logg inn på nytt.'
+            : message,
+        );
       } finally {
         setIsSubmitting(false);
       }
@@ -327,7 +356,6 @@ export default function BookScreen() {
         )}
         {step === 1 && (
           <StepDateTime
-            dates={dates}
             selectedDate={selectedDate}
             selectedTime={selectedTime}
             onSelectDate={(d) => {
@@ -496,68 +524,72 @@ function StepService({
 }
 
 function StepDateTime({
-  dates,
   selectedDate,
   selectedTime,
   onSelectDate,
   onSelectTime,
 }: {
-  dates: Date[];
+  dates?: Date[];
   selectedDate: Date | null;
   selectedTime: string | null;
   onSelectDate: (d: Date) => void;
   onSelectTime: (t: string) => void;
 }) {
   const theme = useTheme();
+  const [showCalendar, setShowCalendar] = useState(false);
   const availableSlots = selectedDate ? getAvailableSlots(selectedDate) : [];
 
   return (
     <View style={styles.stepContainer}>
       <Text style={[styles.stepSectionTitle, { color: theme.text }]}>Velg dato</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.dateScroll}>
-        {dates.map((d) => {
-          const isSelected =
-            selectedDate !== null && d.toDateString() === selectedDate.toDateString();
-          return (
-            <Pressable
-              key={d.toISOString()}
-              onPress={() => onSelectDate(d)}
-              style={({ pressed }) => [
-                styles.dateChip,
-                {
-                  backgroundColor: isSelected ? theme.text : theme.surface,
-                  borderColor: isSelected ? theme.text : theme.surfaceMuted,
-                },
-                pressed && { opacity: 0.8 },
-              ]}>
-              <Text
-                style={[
-                  styles.dateDayName,
-                  { color: isSelected ? theme.surfaceMuted : theme.textSecondary },
-                ]}>
-                {DAY_SHORT[d.getDay()]}
-              </Text>
-              <Text
-                style={[
-                  styles.dateDayNum,
-                  { color: isSelected ? theme.background : theme.text },
-                ]}>
-                {d.getDate()}
-              </Text>
-              <Text
-                style={[
-                  styles.dateMonth,
-                  { color: isSelected ? theme.surfaceMuted : theme.textMuted },
-                ]}>
-                {MONTH_SHORT[d.getMonth()]}
-              </Text>
+
+      <Pressable
+        onPress={() => setShowCalendar(true)}
+        style={({ pressed }) => [
+          styles.dateButton,
+          {
+            backgroundColor: theme.surface,
+            borderColor: selectedDate ? theme.text : theme.surfaceMuted,
+          },
+          pressed && { opacity: 0.85 },
+        ]}>
+        <View style={[styles.dateButtonIcon, { backgroundColor: theme.surfaceMuted }]}>
+          <Icon name="calendar-outline" size={18} color={theme.text} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.dateButtonLabel, { color: theme.textSecondary }]}>
+            {selectedDate ? 'Valgt dato' : 'Når trenger du rengjøring?'}
+          </Text>
+          <Text style={[styles.dateButtonValue, { color: theme.text }]}>
+            {selectedDate ? fmtDate(selectedDate) : 'Trykk for å velge'}
+          </Text>
+        </View>
+        <Icon name="chevron-forward" size={18} color={theme.textMuted} />
+      </Pressable>
+
+      <Modal
+        visible={showCalendar}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowCalendar(false)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }} edges={['top']}>
+          <View style={styles.calendarHeader}>
+            <Pressable onPress={() => setShowCalendar(false)} hitSlop={10}>
+              <Icon name="close" size={24} color={theme.text} />
             </Pressable>
-          );
-        })}
-      </ScrollView>
+            <Text style={[styles.calendarTitle, { color: theme.text }]}>Velg dato</Text>
+            <View style={{ width: 24 }} />
+          </View>
+          <AirbnbCalendar
+            selected={selectedDate}
+            onSelect={(d) => {
+              onSelectDate(d);
+              setShowCalendar(false);
+            }}
+            monthsAhead={6}
+          />
+        </SafeAreaView>
+      </Modal>
 
       {selectedDate && (
         <>
@@ -566,7 +598,7 @@ function StepDateTime({
               styles.stepSectionTitle,
               { color: theme.text, marginTop: Spacing.five },
             ]}>
-            Tidspunkter · {fmtDate(selectedDate)}
+            Tidspunkter
           </Text>
           <View style={styles.slotsGrid}>
             {availableSlots.map((t) => {
@@ -861,19 +893,23 @@ const styles = StyleSheet.create({
   durationText: { ...Typography.micro },
   servicePrice: { ...Typography.callout, fontWeight: '700' },
 
-  dateScroll: { gap: Spacing.two, paddingBottom: Spacing.one },
-  dateChip: {
-    alignItems: 'center',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
+  dateButton: {
+    flexDirection: 'row', alignItems: 'center', gap: Spacing.three,
+    padding: Spacing.three,
     borderRadius: Radius.lg,
     borderWidth: 1.5,
-    minWidth: 52,
-    gap: 2,
   },
-  dateDayName: { ...Typography.micro },
-  dateDayNum: { ...Typography.subhead, fontWeight: '700' },
-  dateMonth: { ...Typography.micro },
+  dateButtonIcon: {
+    width: 40, height: 40, borderRadius: Radius.sm,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dateButtonLabel: { ...Typography.caption },
+  dateButtonValue: { ...Typography.bodyMedium, fontWeight: '600', marginTop: 2 },
+  calendarHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: Spacing.four, paddingVertical: Spacing.three,
+  },
+  calendarTitle: { ...Typography.subhead, fontWeight: '700' },
 
   slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.two },
   slotChip: {

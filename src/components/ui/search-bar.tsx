@@ -12,6 +12,8 @@ interface SearchBarProps {
   onFilterPress?: () => void;
   onSubmitEditing?: () => void;
   style?: ViewStyle;
+  inputRef?: React.RefObject<TextInput | null>;
+  autoFocus?: boolean;
 }
 
 export function SearchBar({
@@ -21,6 +23,8 @@ export function SearchBar({
   onFilterPress,
   onSubmitEditing,
   style,
+  inputRef,
+  autoFocus,
 }: SearchBarProps) {
   const theme = useTheme();
 
@@ -29,6 +33,8 @@ export function SearchBar({
       <View style={[styles.input, { backgroundColor: theme.surface }]}>
         <Icon name="search-outline" size={20} color={theme.textSecondary} />
         <TextInput
+          ref={inputRef}
+          autoFocus={autoFocus}
           value={value}
           onChangeText={onChangeText}
           placeholder={placeholder}
